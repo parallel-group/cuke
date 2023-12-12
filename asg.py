@@ -108,6 +108,7 @@ class Tensor(ASTNode):
         else:
             raise TypeError('reduce must use a callable function')
 
+    @helpers.new_op
     def sum(self, axis=0):
         s1 = ''
         rs = ''

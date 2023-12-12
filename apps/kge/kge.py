@@ -24,25 +24,25 @@ def bov(a, b):
 
 
 def fuse_rule(node, res):
-    if type(node) == TensorOp and 'bvv' in node.attr:
+    if type(node) == TensorOp and 'op_name' in node.attr and node.attr['op_name'] == 'bvv':
         if type(node.operators[1]) == TensorOp and len(node.operators[1].ref_by) == 1:
-            if node.operators[1].op_type in elementwise_op or 'bvm' in node.operators[1].attr:
+            if node.operators[1].op_type in elementwise_op or ('op_name' in node.operators[1].attr and node.operators[1].attr['op_name'] == 'bvm'):
                 fuse_operators(node, node.input_orders[1], node.operators[1])
 
         if type(node.operators[2]) == TensorOp and len(node.operators[2].ref_by) == 1:
-            if node.operators[2].op_type in elementwise_op or 'bvm' in node.operators[2].attr:
+            if node.operators[2].op_type in elementwise_op or ('op_name' in node.operators[2].attr and node.operators[2].attr['op_name'] == 'bvm'):
                 fuse_operators(node, node.input_orders[2], node.operators[2])
 
-    if type(node) == TensorOp and 'bsv' in node.attr:
+    if type(node) == TensorOp and 'op_name' in node.attr and node.attr['op_name'] == 'bsv':
         if type(node.operators[1]) == TensorOp and len(node.operators[1].ref_by) == 1:
-            if 'bvv' in node.operators[1].attr:
+            if 'op_name' in node.operators[1].attr and node.operators[1].attr['op_name'] == 'bvv':
                 fuse_operators(node, node.input_orders[1], node.operators[1])
 
         if type(node.operators[2]) == TensorOp and len(node.operators[2].ref_by) == 1:
             if node.operators[2].op_type in elementwise_op:
                 fuse_operators(node, node.input_orders[2], node.operators[2])
 
-    if type(node) == TensorOp and 'bov' in node.attr:
+    if type(node) == TensorOp and 'op_name' in node.attr and node.attr['op_name'] == 'bov':
         if type(node.operators[1]) == TensorOp and len(node.operators[1].ref_by) == 1:
             if node.operators[1].op_type in elementwise_op:
                 fuse_operators(node, node.input_orders[1], node.operators[1])
@@ -76,7 +76,8 @@ class tiler():
         return node
 
 # transform.passes = [f, tiler(16, 128), parallelizer([80, 8, 32])]
-transform.passes = [tiler(16, 128), f]
+transform.passes = [f]
+# transform.passes = [tiler(16, 128), f]
 
 
 
@@ -201,9 +202,9 @@ def backward():
 
 
 if __name__ == "__main__":
-    # transE()
+    transE()
     transH()
-    # transR()
-    # transF()
-    # RESCAL()
-    # backward()
+    transR()
+    transF()
+    RESCAL()
+    backward()

@@ -241,8 +241,6 @@ def gen_ir(node):
             gen_ir(node.operators[1])
 
             node.eval = node.operators[0].eval
-            # remove_decl(node.operators[0], node.eval)
-            # node.decl.append(Decl(node.eval))
 
             if helpers.is_scalar(node.operators[1]):
                 val = node.operators[1].eval
@@ -629,8 +627,6 @@ def gen_ir(node):
                 keyvalue.append((node.operators[i-1], node.operators[i].eval))
 
             node.eval = node.operators[2].eval
-            # remove_decl(node.operators[2], node.eval)
-            # node.decl.append(Decl(node.eval))
             node.compute = [ir.Code(src, keyvalue[0], dict(keyvalue[1:]))]
 
         elif node.op_type == 'size':

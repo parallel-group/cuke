@@ -186,7 +186,7 @@ def collect_ir(ast, stmt):
 def new_op(func):
     def wrapper_func(*args, **kwargs):
         _res = func(*args, **kwargs)
-        _res.attr[func.__name__] = True
+        _res.attr['op_name'] = func.__name__
         return _res
     return wrapper_func
 
@@ -214,6 +214,14 @@ def flatten(li: list|tuple):
         else:
             res.append(t)
     return res
+
+
+def flatten_remove(li: list|tuple, item):
+    for t in li:
+        if type(t) in (list, tuple):
+            flatten_remove(t, item)
+    if item in li:
+        li.remove(item)
 
 class IRTraversal:
 

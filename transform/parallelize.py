@@ -145,6 +145,8 @@ class parallelizer:
                         break
                 if replace_with != None:
                     decl.append(Decl(replace_with))
+                    if same_object(v, n.eval):
+                        n.eval = replace_with
                 else:
                     decl.append(d)
             n.decl = decl
