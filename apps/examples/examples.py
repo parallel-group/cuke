@@ -3,7 +3,6 @@ from asg import Tensor, Var, apply
 from asg2ir import gen_ir
 import codegen
 import run
-from helpers import get_input_nodes
 
 
 def test1():
