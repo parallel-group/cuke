@@ -2,6 +2,7 @@ import copy
 import ir
 import asg
 import helpers
+import codegen
 
 
 def num_unbind(index):
@@ -451,7 +452,7 @@ def gen_ir(node):
             def action(n, res):
                 if isinstance(n, asg.Tensor) and not 'scope' in n.attr:
                     res.extend(n.compute)
-                    if True: # TODO: check if n depends on items, if not we don't need to put it in the loop body
+                    if helpers.depend_on_item(n, outer_loop.iterate): # TODO: check if n depends on items, if not we don't need to put it in the loop body
                         outer_loop.body.append(n.compute)
                         n.attr['scope'] = outer_loop.body
 
@@ -490,6 +491,7 @@ def gen_ir(node):
             if cond != None:
                 counter = node.operators[-1].eval
                 counter.attr['loop'] = outer_loop
+                node.compute = [ir.Assignment(counter, 0)] + node.compute
                 outer_loop.body.append(ir.Assignment(counter, 1, '+'))
                 assert type(ret_compute[-1]) in (ir.Loop, ir.Assignment)
                 l = ret_compute[-1]
@@ -498,7 +500,10 @@ def gen_ir(node):
                 helpers.rebind_iterate(l.lhs, outer_loop.iterate, counter)
                 node.attr['eval'] = node.eval
                 node.eval = bind(node.eval, [ir.Slice(ir.Literal(0, 'int'), counter, ir.Literal(1, 'int'))])
-
+                node.attr['is_set'] = True
+            elif 'is_set' in node.operators[1].attr:
+                size[primary_axis] = node.operators[1].eval.size[primary_axis]
+                node.attr['is_set'] = True
 
             node.output_order = [(0, outer_loop)]
             outer_loop.attr['output_axis'] = 0
