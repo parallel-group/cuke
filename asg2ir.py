@@ -640,6 +640,7 @@ def gen_ir(node):
 
             axis = node.operators[1].eval.val
             node.eval = ir.Scalar('int')
+            node.decl = [ir.Decl(node.eval)]
             node.compute = [ir.Assignment(node.eval, node.operators[0].eval.size[axis])]
 
 
