@@ -136,6 +136,10 @@ def is_not_in(x, li):
     found.attr['is_arg'] = False
     return inline(src, ('F', found), ('X', x), ('LI', li[0]), ('LSIZE', li._size()[0]))
 
+def breaksymmetry(a, val):
+    c = a.apply(lambda x: smaller(x, val))
+    return a.apply(lambda x: x, cond=c)
+
 def intersect(a, b):
     c = a.apply(lambda x: is_in(x, b))
     return a.apply(lambda x: x, cond=c)
@@ -184,6 +188,11 @@ def SubgraphMatchingVertexInduced(pattern_file_name):
                 elif nb[0]==1 and nb[1]==0:
                     candidate_set = difference(v0_nb, v1_nb)
 
+                if partial_orders[self.level]!=-1:
+                    all_path = [v0, v1]
+                    partial_node = all_path[partial_orders[self.level]]
+                    candidate_set = breaksymmetry(candidate_set, partial_node)
+
                 return candidate_set.apply(_SubgraphMatchingVertexInduced(self.level+1, [v0, v1])).sum()
             else:
                 all_path = self.path + [item]
@@ -206,6 +215,10 @@ def SubgraphMatchingVertexInduced(pattern_file_name):
                         candidate_set = intersect(candidate_set, v_nb)
                     else:
                         candidate_set = difference(candidate_set, v_nb)
+                
+                if partial_orders[self.level]!=-1:
+                    partial_node = all_path[partial_orders[self.level]]
+                    candidate_set =  breaksymmetry(candidate_set, partial_node)
 
                 if self.level == pattern_size-1:
                     return candidate_set.size(0)
