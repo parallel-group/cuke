@@ -159,7 +159,9 @@ class Tensor(ASTNode):
             size[axis] = size[axis] + 1
         out = res = Tensor(size, dtype=self.dtype)
 
+        idx = []
         for i in range(axis):
+            idx.append()
             data = data[:]
             res = res[:]
 

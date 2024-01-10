@@ -1,9 +1,8 @@
 import transform
 from codegen import *
 from helpers import new_op, ASGTraversal
-from transform.fuse import fuser, basic_rule, fuse_operators
+from transform.fuse import basic_rule, fuse_operators
 from asg import *
-from transform.parallelize import parallelizer
 from asg2ir import gen_ir
 
 @new_op
@@ -52,10 +51,17 @@ def fuse_rule(node, res):
                 fuse_operators(node, node.input_orders[2], node.operators[2])
 
 
-f = fuser()
-f.register(basic_rule)
-f.register(fuse_rule)
+class fuser:
+    def __init__(self):
+        self.rules = [basic_rule, fuse_rule]
 
+    def __call__(self, node):
+        def action(n, res):
+            for r in self.rules:
+                r(n, res)
+        t = ASGTraversal(action)
+        t(node)
+        return node
 
 class tiler():
 
@@ -66,18 +72,21 @@ class tiler():
     def __call__(self, node):
         def action(n, res):
             if not 'scope' in n.attr and len(n.compute) > 0:
-                transform.split.split(n, self.C, 0)
-                transform.split.split(n, self.D, 1)
-                if 'bov' in n.attr:
-                    transform.split.split(n, self.D, 2)
+                transform.split.split_level(n, self.C, 0)
+                transform.parallelize.parallelize_loop(n, 80, [0])
+                transform.parallelize.parallelize_loop(n, 16, [0, 0])
+                transform.split.split_level(n, self.D, 2)
+                transform.parallelize.parallelize_level(n, 32, 3)
+                if 'op_name' in n.attr and n.attr['op_name'] == 'bov':
+                    transform.split.split_axis(n, self.D, 2)
 
         t = ASGTraversal(action)
         t(node)
         return node
 
 # transform.passes = [f, tiler(16, 128), parallelizer([80, 8, 32])]
-transform.passes = [f]
-# transform.passes = [tiler(16, 128), f]
+# transform.passes = [f]
+transform.passes = [fuser(), tiler(16, 128)]
 
 
 
@@ -202,9 +211,9 @@ def backward():
 
 
 if __name__ == "__main__":
-    transE()
+    # transE()
     transH()
-    transR()
-    transF()
-    RESCAL()
-    backward()
+    # transR()
+    # transF()
+    # RESCAL()
+    # backward()

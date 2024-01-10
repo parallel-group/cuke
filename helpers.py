@@ -264,6 +264,8 @@ class IRTraversal:
                 self._preorder_traverse(stmt.size, res)
         elif type(stmt) == ir.Scalar:
             self.action(stmt, res)
+        elif type(stmt) == ir.Literal:
+            self.action(stmt, res)
         elif type(stmt) == ir.Indexing:
             cond = self.action(stmt, res)
             if cond[0]:
@@ -508,5 +510,20 @@ def remove_defchain(stmt, stmts):
     _remove_assigns(stmt, stmts)
 
 
-
+def get_loops_at_level(lnest, level, idx, res):
+    lnest = flatten(lnest)
+    if len(lnest) == 0:
+        return
+    if level == 0:
+        i = 0
+        for l in lnest:
+            if isinstance(l, ir.Loop):
+                res.append(idx + [i])
+                i += 1
+    else:
+        i = 0
+        for l in lnest:
+            if isinstance(l, ir.Loop):
+                get_loops_at_level(l.body, level - 1, idx + [i], res)
+                i += 1
 

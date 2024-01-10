@@ -1,26 +1,26 @@
 from asg import *
 from ir import *
 import codegen
-from helpers import get_obj, get_val, ASGTraversal, rebind_iterate, flatten_remove, ir_uses, remove_decl, clear_compute, \
+from helpers import get_obj, get_val, rebind_iterate, flatten_remove, ir_uses, remove_decl, clear_compute, \
     ir_find_defs, same_object, flatten
 from asg2ir import gen_ir
 
 
-class fuser:
-    def __init__(self):
-        self.rules = []
-
-    def register(self, rule):
-        self.rules.append(rule)
-
-    def __call__(self, node):
-        def action(node, res):
-            for r in self.rules:
-                r(node, res)
-
-        t = ASGTraversal(action)
-        t(node)
-        return node
+# class fuser:
+#     def __init__(self):
+#         self.rules = []
+#
+#     def register(self, rule):
+#         self.rules.append(rule)
+#
+#     def __call__(self, node):
+#         def action(node, res):
+#             for r in self.rules:
+#                 r(node, res)
+#
+#         t = ASGTraversal(action)
+#         t(node)
+#         return node
 
 
 # TODO: reimplement this with IRTraversal
@@ -102,6 +102,11 @@ def _replace_arrindex_with_scalar(ir, old, new):
         # TODO: replace inputs
 
 
+def iterate_of_same_loops(x1, x2):
+    if 'loop' in x1.attr and 'loop' in x2.attr:
+        return match_orders([(0, x1.attr['loop'])], [(0, x2.attr['loop'])])
+    return False
+
 def match_orders(order1, order2):
     if len(order1) == len(order2):
         for i in range(len(order1)):
@@ -111,11 +116,11 @@ def match_orders(order1, order2):
             x2 = get_val(order2[i][1].start)
             y2 = get_val(order2[i][1].end)
             z2 = get_val(order2[i][1].step)
-            if x1 == None or not (x1 == x2 or same_object(x1, x2)):
+            if x1 == None or not (x1 == x2 or same_object(x1, x2) or iterate_of_same_loops(x1, x2)):
                 return False
-            if y1 == None or not (y1 == y2 or same_object(y1, y2)):
+            if y1 == None or not (y1 == y2 or same_object(y1, y2) or iterate_of_same_loops(y1, y2)):
                 return False
-            if z1 == None and not (z1 == z2 or same_object(z1, z2)):
+            if z1 == None and not (z1 == z2 or same_object(z1, z2) or iterate_of_same_loops(z1, z2)):
                 return False
         return True
     else:
@@ -225,45 +230,45 @@ def basic_rule(node, res):
             fuse_operators(node, node.input_orders[0], node.operators[0])
 
 
-def test1():
-    A = Tensor((10, 20))
-    B = Tensor((10, 20))
-    C = Tensor((10, 20))
-    D = Tensor((10, 20))
-
-    A = setval(A, 1)
-    t1 = A + B
-    t2 = (C - D).abs()
-    res1 = t1 + t2
-    code = codegen.cpu.print_cpp(gen_ir(res1))
-    print(code)
-
-
-def test2():
-    A = Tensor((10, 20))
-    B = Tensor((20, 30))
-    C = Tensor((10, 30))
-    D = Tensor((10, 30))
-    t1 = (A @ B).abs()
-    t2 = (C - D).abs()
-    res1 = t1 + t2
-    code = codegen.cpu.print_cpp(gen_ir(res1))
-    print(code)
-
-
-def test3():
-    A = Tensor((10, 20))
-    B = Tensor((20, 30))
-    C = Tensor((10, 20))
-    D = Tensor((20, 30))
-    t1 = (A @ B).abs()
-    t2 = (C @ D).round()
-    res1 = t1 + t2
-    code = codegen.cpu.print_cpp(gen_ir(res1))
-    print(code)
-
-
-if __name__ == "__main__":
-    # test1()
-    # test2()
-    test3()
+# def test1():
+#     A = Tensor((10, 20))
+#     B = Tensor((10, 20))
+#     C = Tensor((10, 20))
+#     D = Tensor((10, 20))
+#
+#     A = setval(A, 1)
+#     t1 = A + B
+#     t2 = (C - D).abs()
+#     res1 = t1 + t2
+#     code = codegen.cpu.print_cpp(gen_ir(res1))
+#     print(code)
+#
+#
+# def test2():
+#     A = Tensor((10, 20))
+#     B = Tensor((20, 30))
+#     C = Tensor((10, 30))
+#     D = Tensor((10, 30))
+#     t1 = (A @ B).abs()
+#     t2 = (C - D).abs()
+#     res1 = t1 + t2
+#     code = codegen.cpu.print_cpp(gen_ir(res1))
+#     print(code)
+#
+#
+# def test3():
+#     A = Tensor((10, 20))
+#     B = Tensor((20, 30))
+#     C = Tensor((10, 20))
+#     D = Tensor((20, 30))
+#     t1 = (A @ B).abs()
+#     t2 = (C @ D).round()
+#     res1 = t1 + t2
+#     code = codegen.cpu.print_cpp(gen_ir(res1))
+#     print(code)
+#
+#
+# if __name__ == "__main__":
+#     # test1()
+#     # test2()
+#     test3()

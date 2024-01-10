@@ -6,6 +6,6 @@ import transform.split
 
 passes = []
 
-fu = fuse.fuser()
-fu.register(fuse.basic_rule)
-passes.append(fu)
+# fu = fuse.fuser()
+# fu.register(fuse.basic_rule)
+# passes.append(fu)
