@@ -527,3 +527,25 @@ def get_loops_at_level(lnest, level, idx, res):
                 get_loops_at_level(l.body, level - 1, idx + [i], res)
                 i += 1
 
+
+def depend_on_item(root_node, loop_iterate):
+    # if loop_iterate.name()=='_l15':
+    def ir_action(stmt, ir_res):
+        if type(stmt)==ir.Scalar and stmt.name()==loop_iterate.name():
+            ir_res.extend([True])
+        return [True, True, True, True, True]
+
+    def ast_action(ast_node, ast_res):
+        # if type(ast_node)==asg.TensorOp and ast_node.op_type=='setval' and type(ast_node.compute[0].lhs)==ir.Indexing:
+        #     print(codegen.cpu.to_string(ast_node.compute[0]))
+
+        ir_t = IRTraversal(ir_action)
+        ir_res = ir_t(ast_node.compute[:])
+        if len(ir_res)>0:
+            ast_res.extend([True])
+
+    ast_t = ASGTraversal(ast_action)
+    ast_res = ast_t(root_node)
+
+    #return True
+    return len(ast_res)>0
