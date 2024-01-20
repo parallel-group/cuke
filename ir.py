@@ -139,7 +139,7 @@ class Indexing(DObject):
         super().__init__(dobject.dtype, size)
 
     def ref_size(self, axis):
-        return self.size[axis + self.ref_point]
+        return self.size[axis]
 
 
 class Decl(IR):

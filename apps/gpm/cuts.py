@@ -136,20 +136,50 @@ def is_not_in(x, li):
     found.attr['is_arg'] = False
     return inline(src, ('F', found), ('X', x), ('LI', li[0]), ('LSIZE', li._size()[0]))
 
+
+def merge_is_in(x, second, pj):
+    src = inspect.cleandoc("""
+        if(PJ == SECOND_SIZE || X < SECOND_ONE){F = false; continue; }\n\
+        else if (X > SECOND_ONE) { \n\
+            while(PJ < SECOND_SIZE && X > SECOND_ONE){    \n\
+                PJ++;                                       \n\
+            } \n\
+        } \n\
+        if(PJ == SECOND_SIZE) {F = false; continue; }\n\
+        if(X==SECOND_ONE){
+            F = true;
+        }
+        else{
+            F = false;
+        }
+    """)
+
+    found = Var(dtype='int')
+    found.attr['is_arg'] = False
+    return inline(src, ('F', found), ('X', x), ('SECOND_ONE', second[pj]), ('PJ', pj), ('SECOND_SIZE', second._size()[0]))
+
 def breaksymmetry(a, val):
     c = a.apply(lambda x: smaller(x, val))
     return a.apply(lambda x: x, cond=c)
 
 def intersect(a, b):
-    c = a.apply(lambda x: is_in(x, b))
-    return a.apply(lambda x: x, cond=c)
+    PJ = Var(dtype='int')
+    PJ.attr['is_arg'] = False
+    # PJ = setval(PJ, 0)
+
+    def _body(item):
+        # PJ = setval(PJ, 0)
+        return item
+    c = a.apply(lambda x: merge_is_in(x, b, PJ))
+    # return a.apply(lambda x: x, cond=c)
+    return a.apply(func=_body, cond=c)
 
 def difference(a, b):
     c = a.apply(lambda x: is_not_in(x, b))
     return a.apply(lambda x: x, cond=c)
 
 
-def SubgraphMatchingVertexInduced(pattern_file_name):
+def CuTSVertexInduced(pattern_file_name):
 
     pmtx = read_pattern_file(pattern_file_name)
     partial_orders = symmetry_breaking(pmtx)
@@ -165,7 +195,7 @@ def SubgraphMatchingVertexInduced(pattern_file_name):
     count = Var(name='count', dtype='int')
     count.attr['is_arg'] = False
 
-    class _SubgraphMatchingVertexInduced:
+    class _CuTSVertexInduced:
 
         def __init__(self, level, *path):
              self.level = level
@@ -188,12 +218,12 @@ def SubgraphMatchingVertexInduced(pattern_file_name):
                 elif nb[0]==1 and nb[1]==0:
                     candidate_set = difference(v0_nb, v1_nb)
 
-                if partial_orders[self.level]!=-1:
-                    all_path = [v0, v1]
-                    partial_node = all_path[partial_orders[self.level]]
-                    candidate_set = breaksymmetry(candidate_set, partial_node)
+                # if partial_orders[self.level]!=-1:
+                #     all_path = [v0, v1]
+                #     partial_node = all_path[partial_orders[self.level]]
+                #     candidate_set = breaksymmetry(candidate_set, partial_node)
 
-                return candidate_set.apply(_SubgraphMatchingVertexInduced(self.level+1, [v0, v1])).sum()
+                return candidate_set.apply(_CuTSVertexInduced(self.level+1, [v0, v1])).sum()
             else:
                 all_path = self.path + [item]
                 nb = pmtx[self.level]
@@ -216,26 +246,26 @@ def SubgraphMatchingVertexInduced(pattern_file_name):
                     else:
                         candidate_set = difference(candidate_set, v_nb)
                 
-                if partial_orders[self.level]!=-1:
-                    partial_node = all_path[partial_orders[self.level]]
-                    candidate_set =  breaksymmetry(candidate_set, partial_node)
+                # if partial_orders[self.level]!=-1:
+                #     partial_node = all_path[partial_orders[self.level]]
+                #     candidate_set =  breaksymmetry(candidate_set, partial_node)
 
                 if self.level == pattern_size-1:
                     return candidate_set.size(0)
                 else:
-                    return candidate_set.apply(_SubgraphMatchingVertexInduced(self.level+1, self.path + [item])).sum()
+                    return candidate_set.apply(_CuTSVertexInduced(self.level+1, self.path + [item])).sum()
     
     
 
-    res = edge_list.apply(_SubgraphMatchingVertexInduced(2)).sum()
+    res = edge_list.apply(_CuTSVertexInduced(2)).sum()
     
     res = gen_ir(res)
     code = codegen.cpu.print_cpp(res)
     print(code)
 
-    torch_rowptr, torch_colidx, torch_edge_list, num_node, num_edges, num_jobs = read_graph(False)
-    d = run.cpu.compile_and_run(code, num_jobs, torch_edge_list, num_node, torch_rowptr, num_edges, torch_colidx)
-    print(d)
+    # torch_rowptr, torch_colidx, torch_edge_list, num_node, num_edges, num_jobs = read_graph(False)
+    # d = run.cpu.compile_and_run(code, num_jobs, torch_edge_list, num_node, torch_rowptr, num_edges, torch_colidx)
+    # print(d)
 
 if __name__ == "__main__":
-    SubgraphMatchingVertexInduced(sys.argv[1])
+    CuTSVertexInduced(sys.argv[1])

@@ -2,25 +2,25 @@ from asg import *
 from ir import *
 import codegen
 from helpers import get_obj, get_val, rebind_iterate, flatten_remove, ir_uses, remove_decl, clear_compute, \
-    ir_find_defs, same_object, flatten
+    ir_find_defs, same_object, flatten, ASGTraversal
 from asg2ir import gen_ir
 
 
-# class fuser:
-#     def __init__(self):
-#         self.rules = []
-#
-#     def register(self, rule):
-#         self.rules.append(rule)
-#
-#     def __call__(self, node):
-#         def action(node, res):
-#             for r in self.rules:
-#                 r(node, res)
-#
-#         t = ASGTraversal(action)
-#         t(node)
-#         return node
+class fuser:
+    def __init__(self):
+        self.rules = []
+
+    def register(self, rule):
+        self.rules.append(rule)
+
+    def __call__(self, node):
+        def action(node, res):
+            for r in self.rules:
+                r(node, res)
+
+        t = ASGTraversal(action)
+        t(node)
+        return node
 
 
 # TODO: reimplement this with IRTraversal

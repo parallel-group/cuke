@@ -38,6 +38,8 @@ def apply(func, data: (list, tuple), axes=None, out_ofs=None, cond=None):
 def setval(res, val):
     return TensorOp('setval', res, val)
 
+def copy(left, right):
+    left = setval(left, right)
 
 def inline(src, output, *inputs):
     return TensorOp('inline', src, output, *inputs)
