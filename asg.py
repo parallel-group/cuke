@@ -347,6 +347,7 @@ class TensorOp(Tensor):
 
             ret = self.operators[0](*data)
             dtype = ret.dtype
+            ret.ref_by.append(self)
             out_ofs = self.operators[1 + 2 * self.nparams]
             if out_ofs == None:
                 ref_size = [axis_size] + ret._size()

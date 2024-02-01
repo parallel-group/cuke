@@ -40,6 +40,7 @@ def bind(object: ir.Indexing | ir.Ndarray | ir.Slice, subscripts: list | tuple, 
             else:
                 raise TypeError('idx type error when binding')
             # index.attr.update(attrs[j])
+            index.refresh_size()
             j += 1
 
     while j < len(subscripts):
@@ -52,7 +53,7 @@ def bind(object: ir.Indexing | ir.Ndarray | ir.Slice, subscripts: list | tuple, 
             raise TypeError('incorrect idx type!')
         # new_index.attr.update(attrs[j])
         j += 1
-
+    new_index.refresh_size()
     return new_index
 
 

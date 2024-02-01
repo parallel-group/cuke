@@ -138,6 +138,22 @@ class Indexing(DObject):
 
         super().__init__(dobject.dtype, size)
 
+    def refresh_size(self):
+        if type(self.dobject) in (Ndarray, Slice):
+            if type(self.idx) == Literal and self.idx.val == -1:
+                # idx is unspecified, which means the Indexing is a range of indice stored in dobject, so the size of Indexing should the same as the dobject
+                self.size = self.dobject.size[:]
+                self.ref_point = 1
+            else:
+                # idx is a specific Scalar, Literal, or Indexing, in any case, the size of the Indexing operation should be as follows
+                # ref_point should be the next dimension if the node is further Indexed
+                self.size = self.idx.size + self.dobject.size[1:]
+                self.ref_point = len(self.idx.size)
+        else:
+            # dobject is an Indexing
+            self.size = self.dobject.size[:self.dobject.ref_point] + self.idx.size + self.dobject.size[self.dobject.ref_point + 1:]
+            self.ref_point = self.dobject.ref_point + len(self.idx.size)
+
     def ref_size(self, axis):
         return self.size[axis]
 
