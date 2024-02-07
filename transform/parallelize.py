@@ -5,7 +5,6 @@ from ir import *
 import codegen
 from asg2ir import gen_ir
 
-
 def _get_ref_idx(stmt, v):
     def _get_scalar_idx(idx):
         assert type(idx) == Indexing
@@ -44,6 +43,70 @@ def _get_ref_idx(stmt, v):
     else:
         return None
 
+def _replace_all_ref(stmt, old, new):
+    def action(s, res):
+        match s.__class__.__name__:
+            case 'Loop':
+                if same_object(s.start, old):
+                    s.start = new
+                if same_object(s.end, old):
+                    s.end = new
+                if same_object(s.step, old):
+                    s.step = new
+            case 'FilterLoop':
+                if same_object(s.cond, old):
+                    s.cond = new
+                if same_object(s.start, old):
+                    s.start = new
+                if same_object(s.end, old):
+                    s.end = new
+                if same_object(s.step, old):
+                    s.step = new
+            case 'Expr':
+                if same_object(s.left, old):
+                    s.left = new
+                if same_object(s.right, old):
+                    s.right = new
+            case 'Assignment':
+                if same_object(s.lhs, old):
+                    s.lhs = new
+                if same_object(s.rhs, old):
+                    s.rhs = new
+            case 'Indexing':
+                if same_object(s.dobject, old):
+                    temp = s.dobject
+                    idx_list =[s.idx]
+                    while isinstance(temp, Indexing):
+                        idx_list.append(temp.idx)
+                        temp = temp.doibject
+                    idx_list.reverse()
+                    s.idx = new.idx
+                    new_obj = new.dobject
+                    for i in idx_list:
+                        new_obj = Indexing(new_obj, i)
+                    s.dobject = new_obj
+                if same_object(s.idx, old):
+                    s.idx = new
+            case 'Slice':
+                if same_object(s.start, old):
+                    s.start = new
+                if same_object(s.stop, old):
+                    s.stop = new
+                if same_object(s.step, old):
+                    s.step = new
+            case 'Math':
+                if same_object(s.val, old):
+                    s.val = new
+            case 'Code':
+                if same_object(s.output[1], old):
+                    s.output = (s.output[0], new)
+                for k in s.inputs:
+                    if s.inputs[k] == old:
+                        s.inputs[k] = new
+        return [True, True, True, True, True]
+
+    t = IRTraversal(action)
+    res = t(stmt)
 
 def parallelize_loop(node, num_procs, idx: list | tuple):
     assert isinstance(node, TensorOp)
@@ -56,6 +119,8 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
         loop = None
         j = -1
         for s in scope:
+            if 'reduction' in s.attr:
+                continue
             if isinstance(s, Loop):
                 j += 1
                 if j == i:
@@ -110,18 +175,17 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         for l in loop.attr['nprocs']:
                             indexed = False
                             for ii in idx:
-                                if ('loop' in ii.attr and ('output_axis' in l[1].attr and l[1].attr['output_axis'] ==
+                                if (('loop' in ii.attr and ('output_axis' in l[1].attr and l[1].attr['output_axis'] ==
                                                            ii.attr['loop'].attr['output_axis']) or same_object(ii, l[
-                                    1].iterate)) or ('ploop' in ii.attr and ii.attr['ploop'] == l[1]):
+                                    1].iterate)) and 'reduction' not in ii.attr):
                                     indexed = True
                                     break
                             if not indexed:
                                 ext_size.append(l[0])
                                 loop_info.append(l[1])
-
+                        
                         if len(ext_size) > 0:
-                            to_replace[v] = (Ndarray(v.dtype, ext_size + v.size), loop_info)
-
+                            to_replace[v] = (Ndarray(v.dtype, v.size + ext_size), loop_info)
         def replace_decls(n, res):
             decl = []
             for d in n.decl:
@@ -149,10 +213,79 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         idx = Literal(f"tid{l.attr['plevel']}", 'int')
                         idx.attr['ploop'] = l
                         new_var = Indexing(new_var, idx)
-                    replace_all_ref(n.compute, s, new_var)
-
+                    _replace_all_ref(n.compute, s, new_var)
+                    
         ASGTraversal(replace_refs)(node)
 
+        def add_reduction_spec(s, res):
+            def _is_in_loopbody(loop, body, index):
+                for i, element in enumerate(body):
+                    if isinstance(element, list|tuple):
+                        index.append(i)
+                        if _is_in_loopbody(loop, element, index):
+                            return True
+                        index.pop()
+                    elif element == loop:
+                        index.append(i)
+                        return True
+                return False
+            
+            if isinstance(s, Loop) and 'ptype' in s.attr and s.attr['ptype'] == 'reduction' and 'plevel' in s.attr:
+                redu_eval = None
+                for ass in s.body:
+                    if type(ass) == Assignment:
+                        redu_eval = ass.lhs 
+                    else:
+                        continue
+                if isinstance(redu_eval, (Ndarray, Indexing)):
+                    new_res = Scalar(redu_eval.dtype)
+                    s.attr['redu_res'] = new_res
+                    replace_all_ref(s, redu_eval, new_res)
+                
+                    s.attr['redu_eval'] = redu_eval
+                    if len(s.attr['nprocs']) > 1:
+                        outerloop = s.attr['nprocs'][-2][1]
+                    else:
+                        outerloop = s.attr['nprocs'][-1][1]
+                    
+                    redu_loop = Loop(0, s.attr['nprocs'][-1][0], 1, [])
+                    redu_loop.body.append(Assignment(redu_eval, new_res, '+'))
+                    redu_loop.attr['reduction'] = True
+                    redu_assign = Assignment(redu_eval, new_res)
+                    
+                    pos = []
+                    _is_in_loopbody(s.attr['parent_loop'], outerloop.body, pos)
+                    temp = outerloop.body
+
+                    if len(pos) > 0:
+                        for i in range(len(pos)-1):
+                            temp = temp[pos[i]]
+                        temp.insert(pos[-1]+1, redu_assign)
+                        temp.insert(pos[-1]+1, redu_loop)
+                elif 'redu_res' in s.attr and s.attr['redu_res'] == redu_eval:
+                    if len(s.attr['nprocs']) > 1:
+                        outerloop = s.attr['nprocs'][-2][1]
+                    else:
+                        outerloop = s.attr['nprocs'][-1][1]
+
+                    redu_loop = Loop(0, s.attr['nprocs'][-1][0], 1, [])
+                    redu_loop.body.append(Assignment(s.attr['redu_eval'], s.attr['redu_res'], '+'))
+                    redu_loop.attr['reduction'] = True
+                    redu_assign = Assignment(s.attr['redu_eval'], s.attr['redu_res'])
+
+                    x = []
+                    _is_in_loopbody(s, s.attr['parent_loop'].body, x)
+                    temp = s.attr['parent_loop'].body
+                    if len(x) > 0:
+                        for i in range(len(x)-1):
+                            temp = temp[x[i]]
+                        temp.insert(x[-1]+1, redu_assign)
+                        temp.insert(x[-1]+1, redu_loop)
+                
+            return [True, True, True, True, True]
+        
+        
+        IRTraversal(add_reduction_spec)(loop)
 
 def parallelize_level(node, num_procs, level):
     loops = []

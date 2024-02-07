@@ -1,13 +1,14 @@
 #include <torch/extension.h>
 
 __global__ void FNAME_kernel(PTRS){
+    CU_DE
     CODE
 }
 
 RTYPE FNAME(ARGS)
 {   
     DECL
-    FNAME_kernel<<< batch_size/16, dim3(32,16) >>>(PTR_VARS);
+    FNAME_kernel<<< block, dim3(ty,tx) >>>(PTR_VARS);
     RETURN
 }
 

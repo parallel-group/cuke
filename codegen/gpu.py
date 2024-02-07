@@ -1,73 +1,118 @@
-import helpers
-from codegen.gpu_instructionsets import *
+import transform
+from helpers import collect_ir, get_input_nodes, ASGTraversal, IRTraversal, replace_all_ref
+import random
+import string
+import os
+import asg
+import ir
+import codegen
+from codegen.gpu_instruction_set import *
 
-def to_string(ir):
-    match ir.__class__.__name__:
+def to_string(stmt):
+    match stmt.__class__.__name__:
         case 'Expr':
-            return f"({to_string(ir.left)}" + f" {ir.op} " + f"{to_string(ir.right)})"
+            if stmt.op in asg.arith_op.values():
+                return f"({to_string(stmt.left)}" + f" {stmt.op} " + f"{to_string(stmt.right)})"
+            elif stmt.op == 'bigger':
+                return f"({to_string(stmt.left)} > {to_string(stmt.right)} ? ({to_string(stmt.left)}) : ({to_string(stmt.right)}))"
+            elif stmt.op == 'smaller':
+                return f"({to_string(stmt.left)} < {to_string(stmt.right)} ? ({to_string(stmt.left)}) : ({to_string(stmt.right)}))"
         case 'Assignment':
-            if ir.op is None:
-                return f"{to_string(ir.lhs)} = {to_string(ir.rhs)};\n"
+            if stmt.op is None:
+                return f"{to_string(stmt.lhs)} = {to_string(stmt.rhs)};\n"
             else:
-                return f"{to_string(ir.lhs)} {ir.op}= {to_string(ir.rhs)};\n"
+                return f"{to_string(stmt.lhs)} {stmt.op}= {to_string(stmt.rhs)};\n"
         case 'Loop':
-            code = f"for (int {to_string(ir.iterate)} = {to_string(ir.start)}; {to_string(ir.iterate)} < {to_string(ir.end)}; {to_string(ir.iterate)} += {to_string(ir.step)}) {{\n"
-            # print(ir, ir.body, to_string(ir.body))
-            for e in ir.body:
-                if e:
-                    code += to_string(e)
-            code += "} \n"
-            return code
-        case 'Scalar' | 'Ndarray' | 'Ref':
-            return ir.name()
-        case 'Literal':
-            return str(ir.val)
-        case 'Indexing':
-            if type(ir.dobject) == Slice:
-                return f'(({to_string(ir.dobject.start)})+({to_string(ir.dobject.step)})*({to_string(ir.idx)}))'
-            # elif type(ir.dobject) == Pointer:
-            #     code = f'{to_string(ir.dobject)}['
-            #     for i in range(len(ir.dobject.dims)):
-            #         code += f'{to_string(ir.idx)}*{to_string(ir.dobject.dims[i])}'
-            #         if i<len(ir.dobject.dims)-1:
-            #             code += ' + '
-            #     # for item in ir.dobject.dims:
-            #     #     code += f'{to_string(ir.idx)}*{to_string(item)}'
-                    
-            #     code += ']'
-            #     return code
+            code = ''
+            # print(stmt, stmt.attr)
+            if stmt.attr['ptype'] in ['naive', 'reduction'] and 'plevel' in stmt.attr and 'nprocs' in stmt.attr:
+                # code += f"here we need GPU parallelize setting\n"
+                if stmt.attr['plevel'] in [0, 1]:
+                    # remove outer loop
+                    code += f"int {to_string(stmt.iterate)} = {to_string(stmt.start)};\n"
+                    for e in stmt.body:
+                        if e:
+                            code += to_string(e)
+                else:
+                    code += f"for (int {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
+                    for e in stmt.body:
+                        if e:
+                            code += to_string(e)
+                    code += "} \n"
+                # if 'redu_eval' in stmt.attr:
+                #     if isinstance(stmt.attr["redu_eval"], ir.Scalar):
+                #         code += f'for (int off = blockDim.x/2; off > 0; off >>= 1) {{\n {to_string(stmt.attr["redu_eval"])} += __shfl_down_sync(0xffffffff, {to_string(stmt.attr["redu_eval"])}, off); \n}}\n{to_string(stmt.attr["redu_eval"])} = __shfl_sync(0xffffffff, {to_string(stmt.attr["redu_eval"])}, 0);\n__syncthreads();\n'
+                #     elif isinstance(stmt.attr["redu_eval"], (ir.Ndarray, ir.Indexing)):
+                #         if 'redu_res' in stmt.attr:
+                #             if isinstance(stmt.attr['redu_res'], ir.Scalar):
+                #                 code += f'for (int off = blockDim.x/2; off > 0; off >>= 1) {{\n {to_string(stmt.attr["redu_res"])} += __shfl_down_sync(0xffffffff, {to_string(stmt.attr["redu_res"])}, off); \n}}\nif(threadIdx.x==0) {to_string(stmt.attr["redu_eval"])} = {to_string(stmt.attr["redu_res"])};\n__syncthreads();\n'
+                #             elif isinstance(stmt.attr['redu_res'], (ir.Ndarray, ir.Indexing)):
+                #                 code += f'__syncthreads();\nif(threadIdx.x==0) {to_string(stmt.attr["redu_eval"])} = {to_string(stmt.attr["redu_res"])};\n'
+            elif 'reduction' in stmt.attr and stmt.attr['reduction']:
+                assign = stmt.body[0]
+                code += f'for (int {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} > {to_string(stmt.end)}; {to_string(stmt.iterate)} >>= {to_string(stmt.step)}) {{\n {to_string(assign.rhs)} += __shfl_down_sync(0xffffffff, {to_string(assign.rhs)}, off); \n}}\n__syncthreads();\n'
             else:
-                return f'{to_string(ir.dobject)}[{to_string(ir.idx)}]'
+                code += f"for (int {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
+                for e in stmt.body:
+                    if e:
+                        code += to_string(e)
+                code += "} \n"
+            if 'sync' in stmt.attr:
+                code += '__syncthreads();\n'
+            return code
+        case 'Scalar' | 'Ndarray':
+            if 'offset' in stmt.attr:
+                return f'{stmt.name()}-{to_string(stmt.attr["offset"])}'
+            return stmt.name()
+        case 'Literal':
+            return str(stmt.val)
+        case 'Indexing':
+            if type(stmt.dobject) == ir.Slice:
+                if stmt.dobject.step == 1 or (type(stmt.dobject.step) == ir.Literal and stmt.dobject.step.val == 1):
+                    if stmt.dobject.start == 0 or (type(stmt.dobject.start) == ir.Literal and stmt.dobject.start.val == 0):
+                        return f'({to_string(stmt.idx)})'
+                    else:
+                        return f'(({to_string(stmt.dobject.start)})+({to_string(stmt.idx)}))'
+                else:
+                    if stmt.dobject.start == 0 or (type(stmt.dobject.start) == ir.Literal and stmt.dobject.start.val == 0):
+                        return f'(({to_string(stmt.dobject.step)})*({to_string(stmt.idx)}))'
+                    else:
+                        return f'(({to_string(stmt.dobject.start)})+({to_string(stmt.dobject.step)})*({to_string(stmt.idx)}))'
+            else:
+                return f'{to_string(stmt.dobject)}[{to_string(stmt.idx)}]'
         case 'Decl':
             # variables are passed in as pytorch arguments
-            
-            if type(ir.dobject) == Scalar:
-                if not ir.dobject.is_arg:
-                    return f"{ir.dobject.dtype} {ir.dobject.name()};\n"
+            if type(stmt.dobject) == ir.Scalar:
+                if not stmt.dobject.attr['is_arg']:
+                    return f"{stmt.dobject.dtype} {stmt.dobject.name()};\n"
                 else:
                     return ''
-            elif type(ir.dobject) == Ndarray:
+            elif type(stmt.dobject) == ir.Ndarray:
                 code = ''
-                if not ir.dobject.is_arg:
-                    code = f'torch::Tensor obj_{ir.dobject.name()} = torch::empty({{{",".join([to_string(s) for s in ir.dobject.size])}}}, torch::TensorOptions(torch::k{"Int" if ir.dobject.dtype=="int" else "Float"}).device(torch::kCUDA));\n'
+                if not stmt.dobject.attr['is_arg']:
+                    if 'smem' in stmt.dobject.attr and stmt.dobject.attr['smem']:
+                        shape = ''
+                        for s in stmt.dobject.size:
+                            shape += f'[{s}]'
+                        code = f'__shared__ {stmt.dobject.dtype} {stmt.dobject.name()}{shape};\n'
+                    else:
+                        code = f'torch::Tensor obj_{stmt.dobject.name()} = torch::empty({{{",".join([to_string(s) for s in stmt.dobject.size])}}}, torch::TensorOptions(torch::k{"Int" if stmt.dobject.dtype=="int" else "Float"}).device(torch::kCUDA));\n'
                 return code
-            elif type(ir.dobject) == Shared:
-                shape = ''
-                for i in range(len(ir.dobject.dobject.size)):
-                    shape += f'[{to_string(ir.dobject.dobject.size[i])}]'
-                return f'__shared__ {ir.dobject.dobject.dtype} {ir.dobject.dobject.name()}{shape};\n'
-            elif type(ir.dobject) == Pointer:
-                return f'{ir.dobject.dtype} {ir.dobject.name()};\n'
+            # todo: for smem setting
+            # elif type(stmt.dobject) == ir.Shared:
+            #     shape = ''
+            #     for i in range(len(stmt.dobject.dobject.size)):
+            #         shape += f'[{to_string(stmt.dobject.dobject.size[i])}]'
+            #     return f'__shared__ {stmt.dobject.dobject.dtype} {stmt.dobject.dobject.name()}{shape};\n'
+            # elif type(stmt.dobject) == Pointer:
+            #     return f'{ir.dobject.dtype} {ir.dobject.name()};\n'
             
-            elif type(ir.dobject) == Buffer or Uniq:
-                return f'torch::Tensor {ir.dobject.dobject.__name__}_{ir.dobject.__class__.__name__} = torch::empty({{{to_string(ir.dobject.dobject.size[0])}/16, 16}}, torch::TensorOptions(torch::k{"Int" if ir.dobject.dobject.dtype=="int" else "Float"}).device(torch::kCUDA));\n'
+            # elif type(stmt.dobject) == Buffer or Uniq:
+            #     return f'torch::Tensor {ir.dobject.dobject.__name__}_{ir.dobject.__class__.__name__} = torch::empty({{{to_string(ir.dobject.dobject.size[0])}/16, 16}}, torch::TensorOptions(torch::k{"Int" if ir.dobject.dobject.dtype=="int" else "Float"}).device(torch::kCUDA));\n'
             else:
-                return f'{to_string(ir.dobject)}'
-            # elif type(ir.dobject) == Ref:
-            #     code = f'{ir.dobject.dobject.dtype}* {ir.dobject.name()} = ({ir.dobject.dobject.dtype}*)&{ir.dobject.dobject.addr()}'
-            #     return code
-        case 'ThreadIdy' | 'ThreadIdx' | 'BlockIdy' | 'BlockIdx' | 'BlockDimy' | 'BlockDimx' | 'SyncThreads' | 'SyncWarps':
-            return ir2gpu(ir)
+                return f'{to_string(stmt.dobject)}'
+        case 'ThreadIdy' | 'ThreadIdx' | 'BlockDimy' | 'BlockDimx' | 'BlockIdy' | 'BlockIdx' | 'GridDimy' | 'GridDimx' | 'SyncThreads' | 'SyncWarps':
+            return codegen.gpu_instruction_set.ir2gpu(stmt)
         case 'ShuffleDown':
             return f'for (int off = blockDim.x/2; off > 0; off >>= 1) {{\n {to_string(ir.dobject)} += __shfl_down_sync(0xffffffff, {to_string(ir.dobject)}, off); \n}}\n'
         case 'ShuffleUp':
@@ -83,90 +128,126 @@ def to_string(ir):
             # return f'[{to_string(BlockIdx())}]' 
         case 'IF':
             return f"{to_string(ir.left)} = {to_string(ir.condition)} ? {to_string(ir.true_var)} : {to_string(ir.false_var)};\n"
-        case 'Pointer':
-            return f'{ir.name()}'
-        case 'Access_ptr':
-            code = f'{to_string(ir.dobject)}['
-            for i in range(len(ir.idx)-1):
-                code += '('
-            for i in range(len(ir.idx)):
-                if i<len(ir.idx)-1:
-                    code += f'{to_string(ir.idx[i])}) * {to_string(ir.dobject.size[i+1])}'
-                    code += '+'
-                else:
-                    code += f'{to_string(ir.idx[i])}'
-            
-            code += ']'
+        case 'Math':
+            return f"{stmt.type}({to_string(stmt.val)})"
+        case 'Code':
+            code = stmt.code
+            code = code.replace(stmt.output[0], to_string(stmt.output[1]))
+            for kw in stmt.inputs:
+                code = code.replace(kw, to_string(stmt.inputs[kw]))
+            return code + '\n'
+        case 'list' | 'tuple':
+            code = ''
+            for s in stmt:
+                code += to_string(s)
             return code
         case _:
-            return str(ir)
+            return str(stmt)
 
-def gen_cuda(ast, cpu_ir, gpu_ir):
-    # 2 ir list for cpu and gpu
+
+def collect_cuda_ir(ast, stmt_cpu, stmt_gpu):
     def action_cpu(node, res):
-        if node.valid:
-            if type(node) == Var or type(node) == One or type(node) == Zero or type(node) == Ones or type(node) == Zeros or type(node) == Tensor:
-                res.extend(node.decl)
-            elif type(node) == TensorOp:
-                res.extend(node.decl)
-                # res.extend(node.compute)
-
-
-    def action_cuda(node, res):
-        if node.valid:
-            if type(node) == TensorOp:
-                # res.extend(node.decl)
+        if type(node) == asg.Tensor:
+            res.extend(node.decl)
+    
+    def action_gpu(node, res):
+        if type(node) == asg.TensorOp:
+            res.extend(node.decl)
+            if not 'scope' in node.attr:
                 res.extend(node.compute)
 
-    t = helpers.ASGTraversal(action_cpu)
-    cpu_ir.extend(t(ast))
+    t = ASGTraversal(action_cpu)
+    stmt_cpu.extend(t(ast))
 
-    t = helpers.ASGTraversal(action_cuda)
-    gpu_ir.extend(t(ast))
+    t = ASGTraversal(action_gpu)
+    stmt_gpu.extend(t(ast))
 
-def print_cuda(ast):
+def cuda_spec(stmt, mapping):
+    # replace_all_ref
+
+    def action(s, res):
+        # print(s, res)
+        if s.__class__.__name__ == 'Loop':
+            if s.attr['ptype'] in ['naive', 'reduction'] and 'plevel' in s.attr and 'nprocs' in s.attr:
+                if s.attr['plevel'] == 0:
+                    new_iter = ir.Expr(BlockIdx(), BlockDimy(), '*')
+                    # replace_all_ref(s, s.iterate, new_iter)
+                    s.start = new_iter
+                    s.step = GridDimx()
+                    mapping['block'] = s.attr['nprocs'][s.attr['plevel']][0]
+                elif s.attr['plevel'] == 1:
+                    s.start = ir.Expr(s.start, ThreadIdy(), '+')
+                    s.step = BlockDimy()
+                    mapping['ty'] = s.attr['nprocs'][s.attr['plevel']][0]
+                elif s.attr['plevel'] == 2:
+                    s.start = ir.Expr(s.start, ThreadIdx(), '+')
+                    s.step = BlockDimx()
+                    mapping['tx'] = s.attr['nprocs'][s.attr['plevel']][0]
+                return [True, True, True, True, True]
+            elif 'reduction' in s.attr and s.attr['reduction']:
+                s.start = Expr(BlockDimx(), 2, '/')
+                s.end = 0
+            else:
+                return [True, True, True, True, True]
+        return [True, True, True, True, True]
+    
+    t = IRTraversal(action)
+    res = t(stmt)
+    # return res
+
+
+def print_cuda(node):
+
+    for p in transform.passes:
+        node = p(node)
+    
+    # stmts = []
+    # collect_ir(node, stmts)
+
     cpu_ir = []
     gpu_ir = []
-    gen_cuda(ast, cpu_ir, gpu_ir)
-    # print(cpu_ir, "CUDA IR:::" , gpu_ir)
+    collect_cuda_ir(node, cpu_ir, gpu_ir)
 
-    args = helpers.get_input_nodes(ast)
+    args = get_input_nodes(node)
     
-    argscpu = ', '.join([f'torch::Tensor obj_{a}' if type(args[a]) == Tensor else f'{args[a].dtype} {a}' for a in args])
+    argscpu = ', '.join([f'torch::Tensor obj_{a}' if type(args[a]) == asg.Tensor else f'{args[a].dtype} {a}' for a in args])
     # argsptr = ', '.join([f'obj_{a}.data_ptr<{args[a].dtype}>()' if type(args[a]) == Tensor else f'{a}' for a in args])
     # ptrs = ', '.join([f'{args[a].dtype}* {a}' if type(args[a]) == Tensor else f'{args[a].dtype} {a}' for a in args])
     
-    argsptr = ', '.join([f'obj_{a}.packed_accessor32<{args[a].dtype if args[a].dtype!="int" else "int64_t"}, {len(args[a].ref_size)}, torch::RestrictPtrTraits>()' if type(args[a]) == Tensor else f'{a}' for a in args])
-    ptrs = ', '.join([f'torch::PackedTensorAccessor32<{args[a].dtype if args[a].dtype!="int" else "int64_t"}, {len(args[a].ref_size)}, torch::RestrictPtrTraits> {a}' if type(args[a]) == Tensor else f'{args[a].dtype} {a}' for a in args])
+    argsptr = ', '.join([f'obj_{a}.packed_accessor32<{args[a].dtype if args[a].dtype!="int" else "int64_t"}, {len(args[a].ref_size)}, torch::RestrictPtrTraits>()' if type(args[a]) == asg.Tensor else f'{a}' for a in args])
+    ptrs = ', '.join([f'torch::PackedTensorAccessor32<{args[a].dtype if args[a].dtype!="int" else "int64_t"}, {len(args[a].ref_size)}, torch::RestrictPtrTraits> {a}' if type(args[a]) == asg.Tensor else f'{args[a].dtype} {a}' for a in args])
     # in cuda kernel:     const torch::PackedTensorAccessor32<float, 2, torch::RestrictPtrTraits>
     # host call cuda:     .packed_accessor32<float, 2, torch::RestrictPtrTraits>()
-
+    mapping = {'block':'batch_size/16', 'ty':16, 'tx':32}
     code = ''
     declare = ''
+    cuda_declare = ''
     for d in gpu_ir:
+        cuda_spec(d, mapping)
         if d:
-            if type(d) == Decl and type(d.dobject) == Ndarray:
-                declare += to_string(d)
-                argsptr += f', obj_{d.dobject.name()}.packed_accessor32<{d.dobject.dtype}, {len(d.dobject.size)}, torch::RestrictPtrTraits>()'
-                ptrs += f', torch::PackedTensorAccessor32<{d.dobject.dtype}, {len(d.dobject.size)}, torch::RestrictPtrTraits> {d.dobject.name()}'
-            elif type(d) == Decl and type(d.dobject) in [Buffer, Uniq]:
-                declare += to_string(d)
-                argsptr += f', {d.dobject.dobject.__name__}_{d.dobject.__class__.__name__}.packed_accessor32<{d.dobject.dobject.dtype}, 2, torch::RestrictPtrTraits>()'
-                ptrs += f', torch::PackedTensorAccessor32<{d.dobject.dobject.dtype}, 2, torch::RestrictPtrTraits> {d.dobject.dobject.__name__}_{d.dobject.__class__.__name__}'
+            if type(d) == ir.Decl and type(d.dobject) == ir.Ndarray:
+                if 'smem' in d.dobject.attr and d.dobject.attr['smem']:
+                    cuda_declare += to_string(d)
+                else:
+                    declare += to_string(d)
+                    argsptr += f', obj_{d.dobject.name()}.packed_accessor32<{d.dobject.dtype}, {len(d.dobject.size)}, torch::RestrictPtrTraits>()'
+                    ptrs += f', torch::PackedTensorAccessor32<{d.dobject.dtype}, {len(d.dobject.size)}, torch::RestrictPtrTraits> {d.dobject.name()}'
             else:
                 code += to_string(d)
-    # print(declare)
+
     Return = ''
-    if type(ast.eval) == Scalar:
-        rtype = ast.dtype
-        Return = f'return {ast.eval.name()};\n'
-    elif type(ast.eval) == Ndarray:
+    if type(node.eval) == ir.Scalar:
+        rtype = node.dtype
+        Return = f'return {node.eval.name()};\n'
+    elif type(node.eval) == ir.Ndarray:
         rtype = 'torch::Tensor'
-        Return = f'return obj_{ast.eval.name()};\n'
+        Return = f'return obj_{node.eval.name()};\n'
     else:
-        raise TypeError('wrong output type', ast.eval)
+        rtype = 'void'
 
     with open('codegen/gpu_template.cu', 'r') as f:
         c_code = f.read()
-        c_code = c_code.replace('RTYPE', rtype).replace('FNAME', ast.name).replace('ARGS', argscpu).replace('CODE', code).replace('PTR_VARS', argsptr).replace('PTRS', ptrs).replace('DECL', declare).replace('RETURN', Return)
+        for i in mapping:
+            c_code = c_code.replace(i, str(mapping[i]))
+        c_code = c_code.replace('RTYPE', rtype).replace('FNAME', node.name).replace('ARGS', argscpu).replace('CU_DE', cuda_declare).replace('CODE', code).replace('PTR_VARS', argsptr).replace('PTRS', ptrs).replace('DECL', declare).replace('RETURN', Return)
     return c_code
