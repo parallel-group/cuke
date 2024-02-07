@@ -4,6 +4,8 @@ import asg2ir
 
 def same_object(a, b):
     if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
+        if isinstance(a, ir.Indexing) or isinstance(b, ir.Indexing):
+            return get_obj(a).dobject_id == get_obj(b).dobject_id
         return a.dobject_id == b.dobject_id
     return False
 
