@@ -35,10 +35,12 @@ def split_loop(node, bsize, idx: list|tuple):
         if loop != None:
             scope = flatten(loop.body)
 
-    if loop != None:
+    if loop != None and 'reduction' not in loop.attr:
         new_loops = []
         tl = Loop(loop.start, loop.end, bsize, [])
         tl.attr['ptype'] = loop.attr['ptype']
+        if 'parent_loop' in loop.attr:
+            tl.attr['parent_loop'] = loop.attr['parent_loop']
         axis = None
         order_idx = None
         if 'output_axis' in loop.attr:
@@ -56,11 +58,18 @@ def split_loop(node, bsize, idx: list|tuple):
             new_l.attr['ptype'] = loop.attr['ptype']
             if 'output_axis' in loop.attr:
                 new_l.attr['output_axis'] = loop.attr['output_axis']
+            new_l.attr['parent_loop'] = tl
             tl.body.append(new_l)
             new_loops.append((axis, new_l))
 
         body = loop.body[:]
         rebind_iterate(body, loop.iterate, new_loops[-1][1].iterate)
+        for i in body:
+            if isinstance(i, Loop):
+                i.attr['parent_loop'] = new_loops[-1][1]
+            elif isinstance(i, list|tuple):
+                for j in i:
+                    j.attr['parent_loop'] = new_loops[-1][1]
         new_loops[-1][1].body.extend(body)
         _replace_loop(node.compute, loop, new_loops[0][1])
         if order_idx != None:
@@ -79,6 +88,10 @@ def split_loop(node, bsize, idx: list|tuple):
                     break
             if iidx != None:
                 iorder[iidx:iidx+1] = new_loops
+        
+        for i in range(len(new_loops)):
+            if i>0:
+                new_loops[i][1].attr['parent_loop'] = new_loops[i-1][1]
 
 
 

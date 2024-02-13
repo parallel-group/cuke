@@ -2,6 +2,7 @@ import transform.fuse
 import transform.interchange
 import transform.parallelize
 import transform.split
+import transform.cuda_smem
 
 
 passes = []
