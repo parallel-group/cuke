@@ -148,7 +148,6 @@ def gather_smem(node, C, D):
         return [True, True, True, True, True]
     
     assigns = IRTraversal(get_assigns)(scope)
-    print(codegen.gpu.to_string(scope))
 
     def is_reused(s):
         def action(stmt, res):
@@ -163,4 +162,3 @@ def gather_smem(node, C, D):
         return x
 
     x = is_reused(scope)
-    print(x, codegen.gpu.to_string(x), codegen.gpu.to_string(node.eval))
