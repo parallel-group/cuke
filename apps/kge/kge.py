@@ -84,10 +84,30 @@ class tiler():
         t(node)
         return node
 
+class smem():
+    def __init__(self, C, D):
+        self.C = C
+        self.D = D
+
+    def __call__(self, node):
+        def action(n, res):
+            if 'is_arg' in n.eval.attr and not n.eval.attr['is_arg'] and n.eval != self.eval:
+                transform.cuda_smem.apply_smem(n, node.eval, self.C, self.D)
+            
+            if True:
+                transform.cuda_smem.gather_smem(n, self.C, self.D)
+                # pass
+
+        self.eval = node.eval
+        t = ASGTraversal(action)
+        t(node)
+        
+        return node
+
 # transform.passes = [f, tiler(16, 128), parallelizer([80, 8, 32])]
 # transform.passes = [f]
-transform.passes = [fuser(), tiler(16, 128)]
-
+# transform.passes = [fuser(), tiler(16, 128)]
+transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
 
 
 def transE():
@@ -105,7 +125,9 @@ def transE():
     vr = Remb[r]
 
     res = vh - vt + vr
-    code = codegen.cpu.print_cpp(gen_ir(res))
+    # code = codegen.cpu.print_cpp(gen_ir(res))
+    # print(code)
+    code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
 
@@ -127,7 +149,9 @@ def transH():
 
     # TODO: if there are redundant computation, is fusion always beneficial
     res = vh - vt + vr - bsv(bvv(vp, vh - vt), vp)
-    code = codegen.cpu.print_cpp(gen_ir(res))
+    # code = codegen.cpu.print_cpp(gen_ir(res))
+    # print(code)
+    code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
 
@@ -148,7 +172,9 @@ def transR():
     vr = Remb[r]
 
     res = bvm(vh - vt, mr) + vr
-    code = codegen.cpu.print_cpp(gen_ir(res))
+    # code = codegen.cpu.print_cpp(gen_ir(res))
+    # print(code)
+    code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
 
@@ -167,7 +193,9 @@ def transF():
     vr = Remb[r]
 
     res = bvv(vh, vt) - bvv(vh - vt, vr)
-    code = codegen.cpu.print_cpp(gen_ir(res))
+    # code = codegen.cpu.print_cpp(gen_ir(res))
+    # print(code)
+    code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
 
@@ -181,12 +209,15 @@ def RESCAL():
     h = Tensor((batch_size, ), dtype='int', name='h')
     t = Tensor((batch_size, ), dtype='int', name='t')
     r = Tensor((batch_size, ), dtype='int', name='r')
+    r.attr['reuse'] = True
     vh = Eemb[h]
     vt = Eemb[t]
     mr = Proj[r]
 
     res = bvv(bvm(vh, mr), vt)
-    code = codegen.cpu.print_cpp(gen_ir(res))
+    # code = codegen.cpu.print_cpp(gen_ir(res))
+    # print(code)
+    code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
 
@@ -212,8 +243,8 @@ def backward():
 
 if __name__ == "__main__":
     # transE()
-    transH()
+    # transH()
     # transR()
     # transF()
-    # RESCAL()
+    RESCAL()
     # backward()

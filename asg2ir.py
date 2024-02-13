@@ -2,7 +2,6 @@ import copy
 import ir
 import asg
 import helpers
-import codegen
 
 
 def num_unbind(index):
@@ -109,14 +108,16 @@ def gen_ir(node):
 
     elif type(node) == asg.Var or (type(node) == asg.Tensor and len(node._size()) == 0):
         node.eval = ir.Scalar(node.dtype, node.name)
-        node.eval.attr['is_arg'] = node.attr['is_arg']
+        for key in node.attr:
+            node.eval.attr[key] = node.attr[key]
         node.decl = [ir.Decl(node.eval)]
 
     elif type(node) == asg.Tensor and len(node._size()) > 0:
         # convert AST sizes to IR sizes
         size = helpers.get_ir_of_size(node._size())
         node.eval = ir.Ndarray(node.dtype, size, node.name)
-        node.eval.attr['is_arg'] = node.attr['is_arg']
+        for key in node.attr:
+            node.eval.attr[key] = node.attr[key]
         node.decl = [ir.Decl(node.eval)]
 
     elif type(node) == asg.TensorOp:
@@ -375,10 +376,13 @@ def gen_ir(node):
             node.compute.append(pre_loop)
             for i in range(1, len(all_loops)):
                 if reduce_begins == i:
+                    init.attr['parent_loop'] = pre_loop
                     pre_loop.body.append(init)
                 loop = all_loops[i]
+                loop.attr['parent_loop'] = pre_loop
                 pre_loop.body.append(loop)
                 pre_loop = loop
+            body.attr['parent_loop'] = pre_loop
             pre_loop.body.append(body)
 
             l = node.compute[0]
@@ -396,6 +400,8 @@ def gen_ir(node):
                 subscripts.append(op.eval)
 
             node.eval = bind(node.operators[0].eval, subscripts)
+            for key in node.operators[0].eval.attr:
+                node.eval.attr[key] = node.operators[0].eval.attr[key]
 
         elif node.op_type == 'apply':
 
@@ -454,6 +460,8 @@ def gen_ir(node):
                 if isinstance(n, asg.Tensor) and not 'scope' in n.attr:
                     res.extend(n.compute)
                     if helpers.depend_on_item(n, outer_loop.iterate): # TODO: check if n depends on items, if not we don't need to put it in the loop body
+                        for nn in n.compute:
+                            nn.attr['parent_loop'] = outer_loop
                         outer_loop.body.append(n.compute)
                         n.attr['scope'] = outer_loop.body
 
@@ -473,6 +481,8 @@ def gen_ir(node):
             # if there is no compute in the func, we simply assign the result to itself, so that later the lhs of the assignment will be changed to the output array
             if len(ret_compute) == 0:
                 ret_compute.append(ir.Assignment(res, ret.eval))
+                for nn in ret_compute:
+                    nn.attr['parent_loop'] = outer_loop
                 outer_loop.body.extend(ret_compute)
 
             node.compute = [outer_loop]
@@ -613,7 +623,9 @@ def gen_ir(node):
 
             t = asg.ASGTraversal(action)
             ret_compute = t(ret)
-
+            
+            for nn in ret_compute:
+                nn.attr['parent_loop'] = outer_loop
             outer_loop.body.extend(ret_compute)
             node.compute.append(outer_loop)
 

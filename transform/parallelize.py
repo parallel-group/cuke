@@ -158,7 +158,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
             return [True, True, True, True, True]
 
         assigns = IRTraversal(get_assigns)(loop)
-
+        assigns = assigns[:-1]
         def get_vars(n, res):
             res.extend([d.dobject for d in n.decl])
 
@@ -262,25 +262,6 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                             temp = temp[pos[i]]
                         temp.insert(pos[-1]+1, redu_assign)
                         temp.insert(pos[-1]+1, redu_loop)
-                elif 'redu_res' in s.attr and s.attr['redu_res'] == redu_eval:
-                    if len(s.attr['nprocs']) > 1:
-                        outerloop = s.attr['nprocs'][-2][1]
-                    else:
-                        outerloop = s.attr['nprocs'][-1][1]
-
-                    redu_loop = Loop(0, s.attr['nprocs'][-1][0], 1, [])
-                    redu_loop.body.append(Assignment(s.attr['redu_eval'], s.attr['redu_res'], '+'))
-                    redu_loop.attr['reduction'] = True
-                    redu_assign = Assignment(s.attr['redu_eval'], s.attr['redu_res'])
-
-                    x = []
-                    _is_in_loopbody(s, s.attr['parent_loop'].body, x)
-                    temp = s.attr['parent_loop'].body
-                    if len(x) > 0:
-                        for i in range(len(x)-1):
-                            temp = temp[x[i]]
-                        temp.insert(x[-1]+1, redu_assign)
-                        temp.insert(x[-1]+1, redu_loop)
                 
             return [True, True, True, True, True]
         
