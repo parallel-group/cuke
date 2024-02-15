@@ -164,7 +164,7 @@ def collect_cuda_ir(ast, stmt_cpu, stmt_gpu):
 
 def cuda_spec(stmt, mapping):
     # replace_all_ref
-
+    # todo: change assignment to for-loop
     def action(s, res):
         # print(s, res)
         if s.__class__.__name__ == 'Loop':
