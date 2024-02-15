@@ -10,42 +10,7 @@ from asg import *
 from asg2ir import gen_ir
 from transform import parallelize
 
-def read_graph(partial_edge):
-    np_rowptr = np.fromfile("../citeseer/snap.txt.vertex.bin", dtype=np.int64)
-    np_colidx = np.fromfile("../citeseer/snap.txt.edge.bin", dtype=np.int32)
 
-    torch_rowptr = torch.from_numpy(np_rowptr, ).to(torch.int32)
-    torch_colidx =torch.from_numpy(np_colidx)
-    torch_edge_list = torch.zeros([torch_colidx.shape[0], 2], dtype=torch.int32)
-
-    edge_idx = 0
-    for i in range(0, torch_rowptr.shape[0]-1):
-        for j in range(torch_rowptr[i].item() , torch_rowptr[i+1].item()):
-                if (not partial_edge) or (partial_edge and torch_colidx[j]<i):
-                    torch_edge_list[edge_idx][0] = i
-                    torch_edge_list[edge_idx][1] = torch_colidx[j]
-                    edge_idx = edge_idx+1
-    #Cuke
-    num_node = torch_rowptr.shape[0]-1
-    num_edges = torch_colidx.shape[0]
-    if partial_edge:
-        num_jobs = edge_idx
-    else:
-        num_jobs = num_edges
-
-    return torch_rowptr, torch_colidx, torch_edge_list, num_node, num_edges, num_jobs
-
-def is_in(x, li):
-    src = inspect.cleandoc("""
-    F = BinarySearch(LI, 0, LSIZE, X);
-    """)
-    found = Var(dtype='int')
-    found.attr['is_arg'] = False
-    return inline(src, ('F', found), ('X', x), ('LI', li[0]), ('LSIZE', li._size()[0]))
-
-def intersect(a, b):
-    c = a.apply(lambda x: is_in(x, b))
-    return a.apply(lambda x: x, cond=c)
 
 def p1_decomine():
 

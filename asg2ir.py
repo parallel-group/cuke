@@ -459,7 +459,7 @@ def gen_ir(node):
             def action(n, res):
                 if isinstance(n, asg.Tensor) and not 'scope' in n.attr:
                     res.extend(n.compute)
-                    if helpers.depend_on_item(n, outer_loop.iterate): # TODO: check if n depends on items, if not we don't need to put it in the loop body
+                    if True:#helpers.depend_on_item(n, outer_loop.iterate): # TODO: check if n depends on items, if not we don't need to put it in the loop body
                         for nn in n.compute:
                             nn.attr['parent_loop'] = outer_loop
                         outer_loop.body.append(n.compute)
