@@ -9,65 +9,9 @@ import codegen.cpu
 from asg import *
 from asg2ir import gen_ir
 
-def read_query_file(filename):
-    pmtx = None
-    num_node=0
-    with open(filename) as p:
-        for line in p:
-            if line[0]=='v':
-                num_node+=1
-        p.seek(0, 0)
+from apps.gpm.utils import *
+from apps.gpm.setop import *
 
-        pmtx = [[0 for y in range(num_node)] for x in range(num_node)]
-        for line in p: 
-            if line[0]=='e':
-                v0 = int(line[2])
-                v1 = int(line[4])
-                pmtx[v0][v1] = 1
-                pmtx[v1][v0] = 1
-        # print("pmtx:")
-        # print(pmtx)
-
-        return pmtx
-
-def query_info(pmtx):
-    num_edge = 0
-    num_node = len(pmtx)
-    edge_list = []
-    for row_idx in range(0, len(pmtx)):
-        for col_idx in range(0, len(pmtx[row_idx])):
-            item = pmtx[row_idx][col_idx]
-            if item==1 and row_idx<col_idx:
-                edge_list.append([row_idx, col_idx])
-                num_edge+=1
-    
-    return num_node, num_edge, edge_list
-    
-
-def query_dfs(pmtx):
-    edge_order = []
-
-    def _query_dfs(query_adjlist, cur_node, visited):
-        if cur_node not in visited:
-            visited.add(cur_node)
-            for adj_node in query_adjlist[cur_node]:
-                if [cur_node, adj_node] not in edge_order and [adj_node, cur_node] not in edge_order:
-                    edge_order.append([cur_node, adj_node])
-                _query_dfs(query_adjlist, adj_node, visited)
-    
-    query_adjlist = []
-
-    for row_idx in range(0, len(pmtx)):
-        this_list = []
-        for col_idx in range(0, len(pmtx[row_idx])):
-            if pmtx[row_idx][col_idx]==1:
-                this_list.append(col_idx)
-        
-        query_adjlist.append(this_list)
-
-    _query_dfs(query_adjlist, 0, set())
-    return edge_order
-    
 
 def loop_cond(detected_nodes, equal_node, cur_vertex):
     code = "RES = "

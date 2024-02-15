@@ -2,7 +2,7 @@ from asg import *
 from ir import *
 import codegen
 from helpers import get_obj, get_val, rebind_iterate, flatten_remove, ir_uses, remove_decl, clear_compute, \
-    ir_find_defs, same_object, flatten, ASGTraversal
+    ir_find_defs, same_object, flatten, ASGTraversal, replace_all_ref
 from asg2ir import gen_ir
 
 
@@ -228,6 +228,19 @@ def basic_rule(node, res):
         if type(node.operators[0]) == TensorOp and node.operators[0].op_type in (
                 elementwise_op + ['apply', 'setval']) and len(node.operators[0].ref_by) == 1:
             fuse_operators(node, node.input_orders[0], node.operators[0])
+    
+    elif type(node) == TensorOp and node.op_type == 'inline':
+        for i in range(2, len(node.operators), 2):
+            if type(node.operators[i]) == TensorOp and node.operators[i].op_type in (elementwise_op + ['setval']):
+                assert len(node.operators[i]._size()) == 0
+                dfs = ir_find_defs(node.operators[i].compute, node.operators[i].eval)
+                if len(dfs) > 0:
+                    if not ir_uses(dfs[-1], node.operators[i].eval):
+                        df = dfs[-1].rhs
+                        replace_all_ref(node.compute[0], node.operators[i].eval, df)
+                        clear_compute(node.operators[i])
+                        remove_decl(node.operators[i], node.operators[i].eval)
+
 
 
 # def test1():
