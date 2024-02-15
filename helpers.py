@@ -17,6 +17,12 @@ def same_object(a, b):
         return a.dobject_id == b.dobject_id
     return False
 
+# def same_object(a, b):
+#     if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
+#         return a.dobject_id == b.dobject_id
+#     return False
+
+
 def is_int_var(v):
     return isinstance(v, asg.Tensor) and v.dtype == 'int' and len(v.ref_size) == 0
 
