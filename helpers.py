@@ -3,9 +3,17 @@ import asg
 import asg2ir
 
 def same_object(a, b):
+    # aid = None
+    # bid = None
+    # if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
+    #     aid = a.dobject_id
+    #     bid = b.dobject_id
+    #     if isinstance(a, ir.Indexing):
+    #         aid = get_obj(a).dobject_id
+    #     if isinstance(b, ir.Indexing):
+    #         bid = get_obj(b).dobject_id
+    #     return aid == bid
     if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
-        if isinstance(a, ir.Indexing) or isinstance(b, ir.Indexing):
-            return get_obj(a).dobject_id == get_obj(b).dobject_id
         return a.dobject_id == b.dobject_id
     return False
 
@@ -199,7 +207,7 @@ def new_op(func):
     return wrapper_func
 
 
-def get_obj(stmt: (ir.Indexing, ir.Scalar)):
+def get_obj(stmt: (ir.Indexing, ir.Ndarray, ir.Scalar)):
     obj = stmt
     while hasattr(obj, 'dobject'):
         obj = obj.dobject

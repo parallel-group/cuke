@@ -140,6 +140,9 @@ def merge_loops(order1, order2, data, this_node, input_node):
                     nl.attr['loop_ofs'] = max(nl.attr['loop_ofs'], ol.attr['loop_ofs'])
                 else:
                     nl.attr['loop_ofs'] = ol.attr['loop_ofs']
+            # for key in ol.attr:
+            #     if key != 'loop_ofs':
+            #         nl.attr[key] = ol.attr[key]
 
         dfs = ir_find_defs(order2[-1][1].body, data)
         if len(dfs) > 0:

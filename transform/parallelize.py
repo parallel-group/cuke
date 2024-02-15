@@ -158,7 +158,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
             return [True, True, True, True, True]
 
         assigns = IRTraversal(get_assigns)(loop)
-        assigns = assigns[:-1]
+        # assigns = assigns[:-1]
         def get_vars(n, res):
             res.extend([d.dobject for d in n.decl])
 
@@ -175,9 +175,9 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         for l in loop.attr['nprocs']:
                             indexed = False
                             for ii in idx:
-                                if (('loop' in ii.attr and ('output_axis' in l[1].attr and l[1].attr['output_axis'] ==
+                                if ('loop' in ii.attr and ('output_axis' in l[1].attr and l[1].attr['output_axis'] ==
                                                            ii.attr['loop'].attr['output_axis']) or same_object(ii, l[
-                                    1].iterate)) and 'reduction' not in ii.attr):
+                                    1].iterate))  or ('ploop' in ii.attr and ii.attr['ploop'] == l[1]):
                                     indexed = True
                                     break
                             if not indexed:
@@ -185,7 +185,11 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                                 loop_info.append(l[1])
                         
                         if len(ext_size) > 0:
-                            to_replace[v] = (Ndarray(v.dtype, v.size + ext_size), loop_info)
+                            to_replace[v] = (Ndarray(v.dtype, ext_size + v.size), loop_info)
+        
+        # for key in to_replace:
+        #     print('-->', key, to_replace[key], to_replace[key][0].size, to_replace[key][1][0].attr, codegen.gpu.to_string(key), codegen.gpu.to_string(to_replace[key]))
+
         def replace_decls(n, res):
             decl = []
             for d in n.decl:
@@ -213,8 +217,8 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         idx = Literal(f"tid{l.attr['plevel']}", 'int')
                         idx.attr['ploop'] = l
                         new_var = Indexing(new_var, idx)
-                    _replace_all_ref(n.compute, s, new_var)
-                    
+                    replace_all_ref(n.compute, s, new_var)
+
         ASGTraversal(replace_refs)(node)
 
         def add_reduction_spec(s, res):
