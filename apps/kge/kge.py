@@ -107,7 +107,9 @@ class smem():
 # transform.passes = [f, tiler(16, 128), parallelizer([80, 8, 32])]
 # transform.passes = [f]
 # transform.passes = [fuser(), tiler(16, 128)]
-transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
+# transform.passes = [fuser()]
+transform.passes = [fuser(), tiler(16, 64)]
+# transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
 
 
 def transE():
@@ -142,6 +144,7 @@ def transH():
     h = Tensor((batch_size, ), dtype='int', name='h')
     t = Tensor((batch_size, ), dtype='int', name='t')
     r = Tensor((batch_size, ), dtype='int', name='r')
+    r.attr['reuse'] = True
     vh = Eemb[h]
     vt = Eemb[t]
     vr = Remb[r]
@@ -166,6 +169,7 @@ def transR():
     h = Tensor((batch_size, ), dtype='int', name='h')
     t = Tensor((batch_size, ), dtype='int', name='t')
     r = Tensor((batch_size, ), dtype='int', name='r')
+    r.attr['reuse'] = True
     vh = Eemb[h]
     vt = Eemb[t]
     mr = Proj[r]
@@ -188,6 +192,7 @@ def transF():
     h = Tensor((batch_size, ), dtype='int', name='h')
     t = Tensor((batch_size, ), dtype='int', name='t')
     r = Tensor((batch_size, ), dtype='int', name='r')
+    r.attr['reuse'] = True
     vh = Eemb[h]
     vt = Eemb[t]
     vr = Remb[r]
@@ -243,8 +248,8 @@ def backward():
 
 if __name__ == "__main__":
     # transE()
-    # transH()
+    transH()
     # transR()
     # transF()
-    RESCAL()
+    # RESCAL()
     # backward()

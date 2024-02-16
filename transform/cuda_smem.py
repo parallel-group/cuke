@@ -162,3 +162,11 @@ def gather_smem(node, C, D):
         return x
 
     x = is_reused(scope)
+    
+    if x != []:
+        print(x, codegen.gpu.to_string(x))
+        # print(assigns, codegen.gpu.to_string(assigns))
+        for i in assigns:
+            print(codegen.gpu.to_string(i), i.attr)
+            if 'parent_loop' in i.attr:
+                print(codegen.gpu.to_string(i.attr['parent_loop']))

@@ -14,8 +14,6 @@ def same_object(a, b):
     #         bid = get_obj(b).dobject_id
     #     return aid == bid
     if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
-        if isinstance(a, ir.Indexing) or isinstance(b, ir.Indexing):
-            return get_obj(a).dobject_id == get_obj(b).dobject_id
         return a.dobject_id == b.dobject_id
     return False
 
@@ -216,7 +214,7 @@ def new_op(func):
     return wrapper_func
 
 
-def get_obj(stmt: (ir.Indexing, ir.Scalar)):
+def get_obj(stmt: (ir.Indexing, ir.Ndarray, ir.Scalar)):
     obj = stmt
     while hasattr(obj, 'dobject'):
         obj = obj.dobject
