@@ -19,6 +19,13 @@ def same_object(a, b):
 
 # def same_object(a, b):
 #     if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
+#         if isinstance(a, ir.Indexing) or isinstance(b, ir.Indexing):
+#             return get_obj(a).dobject_id == get_obj(b).dobject_id
+#         return a.dobject_id == b.dobject_id
+#     return False
+
+# def same_object(a, b):
+#     if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
 #         return a.dobject_id == b.dobject_id
 #     return False
 
@@ -303,7 +310,8 @@ class IRTraversal:
         elif type(stmt) == ir.Code:
             cond = self.action(stmt, res)
             if cond[0]:
-                self._preorder_traverse(stmt.output[1], res)
+                for k in stmt.outputs:
+                    self._preorder_traverse(stmt.outputs[k], res)
             if cond[1]:
                 for k in stmt.inputs:
                     self._preorder_traverse(stmt.inputs[k], res)
@@ -369,8 +377,9 @@ def replace_all_ref(stmt, old, new):
                 if same_object(s.val, old):
                     s.val = new
             case 'Code':
-                if same_object(s.output[1], old):
-                    s.output = (s.output[0], new)
+                for k in s.outputs:
+                    if same_object(s.outputs[k], old):
+                        s.outputsk[k] = new
                 for k in s.inputs:
                     if s.inputs[k] == old:
                         s.inputs[k] = new
@@ -459,9 +468,10 @@ def ir_find_defs(stmt, data):
     def action(s, res):
         if type(s) == ir.Assignment and same_object(get_obj(s.lhs), data):
             res.append(s)
-        elif type(s) == ir.Code and same_object(get_obj(s.output[1]), data):
-            res.append(s)
-
+        elif type(s) == ir.Code:
+            for k in s.outputs:
+                if same_object(get_obj(s.outputs[k]), data):
+                     res.append(s)
         return [True, True, True, True, True]
 
     return IRTraversal(action)(stmt)

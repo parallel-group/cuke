@@ -4,10 +4,10 @@ class IR:
 
 
 class Code(IR):
-    def __init__(self, code: str, output, inputs: dict):
+    def __init__(self, code: str, outputs:dict, inputs: dict):
         super().__init__()
         self.code = code
-        self.output = output
+        self.outputs = outputs
         self.inputs = inputs
 
 

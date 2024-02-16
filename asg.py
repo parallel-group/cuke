@@ -41,8 +41,8 @@ def setval(res, val):
 def copy(left, right):
     left = setval(left, right)
 
-def inline(src, output, *inputs):
-    return TensorOp('inline', src, output, *inputs)
+def inline(src, output=[], inputs=[]):
+    return TensorOp('inline', src, len(output), *[*output, *inputs])
 
 def einsum(exp: str, tensor1, tensor2):
     return TensorOp('einsum', tensor1, tensor2, exp)
@@ -303,7 +303,10 @@ class TensorOp(Tensor):
                     idx = Const(slice(start, stop, step), 'slice')
 
                     if step.val == 1:
-                        csize = [helpers.eval_const_expr(stop - start)]
+                        if type(start) == Const and start.val==0:
+                            csize = [helpers.eval_const_expr(stop)]
+                        else:
+                            csize = [helpers.eval_const_expr(stop - start)]
                     else:
                         csize = [helpers.eval_const_expr(stop - start) // step]
                 elif helpers.is_1dint_tensor(idx):
@@ -434,16 +437,21 @@ class TensorOp(Tensor):
                 assert self.operators[0].dtype == self.operators[1].dtype
 
         elif op_type == 'inline':
-            dtype = self.operators[1][1].dtype
-            ref_size = self.operators[1][1]._size()
+            src = self.operators[0]
+            if type(self.operators[1]) == int:
+                self.operators[1] = Const(self.operators[1], 'int')
+            num_output = self.operators[1]
+            
+            dtype = self.operators[2][1].dtype
+            ref_size = self.operators[2][1]._size()
 
             keyvalue = []
-            src = self.operators[0]
-            for op in self.operators[1:]:
+            for op in self.operators[2:]:
                 keyvalue.append(op[0])
                 keyvalue.append(op[1])
             self.operators.clear()
             self.operators.append(src)
+            self.operators.append(num_output)
             self.operators.extend(keyvalue)
 
         elif op_type == 'size':

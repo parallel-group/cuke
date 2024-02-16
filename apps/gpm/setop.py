@@ -11,10 +11,10 @@ def intersect(a, b):
     output_tensor = Tensor((4096, ), dtype='int')
     output_tensor.attr['is_arg'] = False
 
-    output_size = inline(src, ('RES_SIZE', output_size), \
-                                ('FIRST_TENSOR', a[0]), ('FIRST_SIZE', a._size()[0]), \
-                                ('SECOND_TENSOR', b[0]), ('SECOND_SIZE',  b._size()[0]),  \
-                                ('RES_TENSOR', output_tensor[0]))
+    output_size = inline(src, [ ('RES_SIZE', output_size), ('RES_TENSOR', output_tensor[0])], \
+                                [('FIRST_TENSOR', a[0]), ('FIRST_SIZE', a._size()[0]), \
+                                ('SECOND_TENSOR', b[0]), ('SECOND_SIZE',  b._size()[0])]  \
+                                )
     ret_val = output_tensor[0:output_size]
     ret_val.ref_size[0].attr['dynamic_size'] = True
     ret_val.attr['is_set'] = True
