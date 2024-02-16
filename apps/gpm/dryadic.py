@@ -95,13 +95,13 @@ def DryadicEdgeInduced(pattern_file_name):
     partial_orders = symmetry_breaking(pmtx)
     pattern_size = len(pmtx)
 
-    num_node =  Var(name='num_node', dtype='int')
-    num_edge =  Var(name='num_edge', dtype='int')
-    num_jobs =  Var(name='num_jobs', dtype='int')
+    num_node =  Var(name='num_node', dtype='int32_t')
+    num_edge =  Var(name='num_edge', dtype='int64_t')
+    num_jobs =  Var(name='num_jobs', dtype='int64_t')
     
-    rowptr = Tensor((num_node,), dtype='int', name='rowptr')
-    colidx = Tensor((num_edge,), dtype='int', name='colidx')
-    edge_list =  Tensor((num_jobs, 2), dtype='int', name='edge_list')
+    rowptr = Tensor((num_node,), dtype='int64_t', name='rowptr')
+    colidx = Tensor((num_edge,), dtype='int32_t', name='colidx')
+    edge_list =  Tensor((num_jobs, 2), dtype='int32_t', name='edge_list')
 
     class _DryadicEdgeInduced:
 

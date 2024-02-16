@@ -5,10 +5,10 @@ def intersect(a, b):
     src = inspect.cleandoc("""
     RES_SIZE = SetIntersection(FIRST_TENSOR, FIRST_SIZE, SECOND_TENSOR, SECOND_SIZE, RES_TENSOR);
     """)
-    output_size = Var(dtype='int')
+    output_size = Var(dtype='int32_t')
     output_size.attr['is_arg'] = False
 
-    output_tensor = Tensor((4096, ), dtype='int')
+    output_tensor = Tensor((4096, ), dtype=a[0].dtype)
     output_tensor.attr['is_arg'] = False
 
     output_size = inline(src, [ ('RES_SIZE', output_size), ('RES_TENSOR', output_tensor[0])], \

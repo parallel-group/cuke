@@ -513,7 +513,7 @@ def gen_ir(node):
                     l = l.body[-1]
                 helpers.rebind_iterate(l.lhs, outer_loop.iterate, counter)
                 node.attr['eval'] = node.eval
-                node.eval = bind(node.eval, [ir.Slice(ir.Literal(0, 'int'), counter, ir.Literal(1, 'int'))])
+                node.eval = bind(node.eval, [ir.Slice(ir.Literal(0, counter.dtype), counter, ir.Literal(1, counter.dtype))])
                 node.attr['is_set'] = True
             elif 'is_set' in node.operators[1].attr:
                 size[primary_axis] = node.operators[1].eval.size[primary_axis]
@@ -661,7 +661,7 @@ def gen_ir(node):
             gen_ir(node.operators[1])
 
             axis = node.operators[1].eval.val
-            node.eval = ir.Scalar('int')
+            node.eval = ir.Scalar(node.operators[0]._size()[0].dtype)
             node.decl = [ir.Decl(node.eval)]
             node.compute = [ir.Assignment(node.eval, node.operators[0].eval.size[axis])]
 
