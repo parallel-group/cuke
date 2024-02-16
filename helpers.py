@@ -2,6 +2,23 @@ import ir
 import asg
 import asg2ir
 
+def same_object(a, b):
+    # aid = None
+    # bid = None
+    # if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
+    #     aid = a.dobject_id
+    #     bid = b.dobject_id
+    #     if isinstance(a, ir.Indexing):
+    #         aid = get_obj(a).dobject_id
+    #     if isinstance(b, ir.Indexing):
+    #         bid = get_obj(b).dobject_id
+    #     return aid == bid
+    if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
+        if isinstance(a, ir.Indexing) or isinstance(b, ir.Indexing):
+            return get_obj(a).dobject_id == get_obj(b).dobject_id
+        return a.dobject_id == b.dobject_id
+    return False
+
 # def same_object(a, b):
 #     if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
 #         if isinstance(a, ir.Indexing) or isinstance(b, ir.Indexing):
@@ -9,10 +26,10 @@ import asg2ir
 #         return a.dobject_id == b.dobject_id
 #     return False
 
-def same_object(a, b):
-    if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
-        return a.dobject_id == b.dobject_id
-    return False
+# def same_object(a, b):
+#     if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
+#         return a.dobject_id == b.dobject_id
+#     return False
 
 
 def is_int_var(v):
