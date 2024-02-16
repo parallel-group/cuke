@@ -15,7 +15,7 @@ type_map = {'int': 'kInt',
 
 def get_dtype(expr):
     if isinstance(expr, ir.Expr):
-        return get_expr_dtype(expr.left)
+        return get_dtype(expr.left)
     elif isinstance(expr, ir.DObject):
         return expr.dtype
 
