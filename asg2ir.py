@@ -190,9 +190,11 @@ def gen_ir(node):
                 pre_loop.attr['output_axis'] = level
                 compute.append(pre_loop)
                 compute = pre_loop.body
-            assign = ir.Assignment(res, ir.Expr(lhs, rhs, op))
-            assign.attr['parent_loop'] = pre_loop
-            compute.append(assign)
+            
+            compute.append(ir.Assignment(res, ir.Expr(lhs, rhs, op)))
+            # assign = ir.Assignment(res, ir.Expr(lhs, rhs, op))
+            # assign.attr['parent_loop'] = pre_loop
+            # compute.append(assign)
 
         elif node.op_type in asg.math_op:
             gen_ir(node.operators[0])
@@ -651,9 +653,6 @@ def gen_ir(node):
                 else:
                     gen_ir(node.operators[i+1])
                     inputs_keyvalue.append((node.operators[i], node.operators[i+1].eval))
-
-            print(outputs_keyvalue)
-            print(inputs_keyvalue)
             node.eval = node.operators[3].eval
             node.compute = [ir.Code(src, dict(outputs_keyvalue), dict(inputs_keyvalue))]
 
