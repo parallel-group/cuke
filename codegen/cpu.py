@@ -81,7 +81,8 @@ def to_string(stmt):
             return f"{stmt.type}({to_string(stmt.val)})"
         case 'Code':
             code = stmt.code
-            code = code.replace(stmt.output[0], to_string(stmt.output[1]))
+            for kw in stmt.outputs:
+                code = code.replace(kw, to_string(stmt.outputs[kw]))
             for kw in stmt.inputs:
                 code = code.replace(kw, to_string(stmt.inputs[kw]))
             return code + '\n'

@@ -639,13 +639,22 @@ def gen_ir(node):
 
         elif node.op_type == 'inline':
             src = node.operators[0]
-            keyvalue = []
+            num_output = node.operators[1].val
+            outputs_keyvalue = []
+            inputs_keyvalue = []
             for i in range(2, len(node.operators), 2):
-                gen_ir(node.operators[i])
-                keyvalue.append((node.operators[i-1], node.operators[i].eval))
+                gen_ir(node.operators[i+1])
+                if i<=num_output*2:
+                    gen_ir(node.operators[i+1])
+                    outputs_keyvalue.append((node.operators[i], node.operators[i+1].eval))
+                else:
+                    gen_ir(node.operators[i+1])
+                    inputs_keyvalue.append((node.operators[i], node.operators[i+1].eval))
 
-            node.eval = node.operators[2].eval
-            node.compute = [ir.Code(src, keyvalue[0], dict(keyvalue[1:]))]
+            print(outputs_keyvalue)
+            print(inputs_keyvalue)
+            node.eval = node.operators[3].eval
+            node.compute = [ir.Code(src, dict(outputs_keyvalue), dict(inputs_keyvalue))]
 
         elif node.op_type == 'size':
             gen_ir(node.operators[0])
