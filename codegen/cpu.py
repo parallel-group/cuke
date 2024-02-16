@@ -6,6 +6,18 @@ import os
 import asg
 import ir
 
+#https://github.com/pytorch/pytorch/blob/main/torch/csrc/api/include/torch/types.h
+type_map = {'int': 'kInt', 
+            'int32_t': 'kInt',
+            'int64_t': 'kLong',
+            'float': 'kFloat',
+            'double': 'kDouble'}
+
+def get_dtype(expr):
+    if isinstance(expr, ir.Expr):
+        return get_expr_dtype(expr.left)
+    elif isinstance(expr, ir.DObject):
+        return expr.dtype
 
 def to_string(stmt):
     match stmt.__class__.__name__:
@@ -25,7 +37,7 @@ def to_string(stmt):
             code = ''
             if stmt.attr['ptype'] == 'naive' and 'plevel' in stmt.attr and 'nprocs' in stmt.attr:
                 code += f"#pragma omp parallel for num_threads({stmt.attr['nprocs'][stmt.attr['plevel']][0]})\n"
-            code += f"for (int {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
+            code += f"for ({get_dtype(stmt.end)} {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
             for e in stmt.body:
                 if e:
                     code += to_string(e)
@@ -35,7 +47,7 @@ def to_string(stmt):
             code = ''
             if stmt.attr['ptype'] == 'naive' and 'plevel' in stmt.attr and 'nprocs' in stmt.attr:
                 code += f"#pragma omp parallel for num_threads({stmt.attr['nprocs'][stmt.attr['plevel']][0]})\n"
-            code += f"for (int {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
+            code += f"for ({get_dtype(stmt.end)} {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
             for e in stmt.cond_body:
                 if e:
                     code += to_string(e)
@@ -74,7 +86,7 @@ def to_string(stmt):
             elif type(stmt.dobject) == ir.Ndarray:
                 code = ''
                 if not stmt.dobject.attr['is_arg']:
-                    code = f'torch::Tensor obj_{stmt.dobject.name()} = torch::empty({{{",".join([to_string(s) for s in stmt.dobject.size])}}}, at::k{"Int" if stmt.dobject.dtype == "int" else "Float"});\n'
+                    code = f'torch::Tensor obj_{stmt.dobject.name()} = torch::empty({{{",".join([to_string(s) for s in stmt.dobject.size])}}}, at::{type_map[stmt.dobject.dtype]});\n'
                 code += f'auto {stmt.dobject.name()} = obj_{stmt.dobject.name()}.accessor<{stmt.dobject.dtype}, {len(stmt.dobject.size)}>();\n'
                 return code
         case 'Math':

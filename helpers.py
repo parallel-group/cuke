@@ -31,7 +31,7 @@ def same_object(a, b):
 
 
 def is_int_var(v):
-    return isinstance(v, asg.Tensor) and v.dtype == 'int' and len(v.ref_size) == 0
+    return isinstance(v, asg.Tensor) and v.dtype in asg.int_types and len(v.ref_size) == 0
 
 
 def is_scalar(v):
@@ -43,7 +43,7 @@ def is_1d_tensor(v):
 
 
 def is_1dint_tensor(v):
-    return is_1d_tensor(v) and v.dtype == 'int'
+    return is_1d_tensor(v) and v.dtype in asg.int_types
 
 
 def eval_const_expr(expr):
@@ -91,7 +91,7 @@ def has_same_value(e1, e2):
     elif type(e1) == asg.Var or type(e1) == asg.Tensor:
         return e1.id == e2.id
     elif type(e1) == asg.Const:
-        if e1.dtype == 'int' and e2.dtype == 'int':
+        if e1.dtype in asg.int_types and e2.dtype in asg.int_types:
             return e1.val == e2.val
         elif e1.dtype == 'slice' and e2.dtype == 'slice':
             return has_same_value(e1.val.start, e2.val.start) and has_same_value(e1.val.stop,
