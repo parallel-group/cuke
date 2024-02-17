@@ -6,43 +6,79 @@ import codegen
 from asg2ir import gen_ir
 import copy
 
-def _get_ref_idx(stmt, v):
-    def _get_scalar_idx(idx):
-        assert type(idx) == Indexing
+def _same_object(a, b):
+    if isinstance(a, DObject) and isinstance(b, DObject):
+        return get_obj(a).dobject_id == get_obj(b).dobject_id
+    return False
 
-        def action(s, res):
-            if type(s) in (Scalar, Literal):
-                res.append(s)
-            elif type(s) == Ndarray:
-                return [False]
-
-            return [True, True, True, True, True]
-
-        t = IRTraversal(action)
-        res = t(idx)
-        return res
-
+def _replace_all_ref(stmt, old, new):
     def action(s, res):
-        if type(s) == Indexing:
-            if get_obj(s).dobject_id == v.dobject_id:
-                if len(res) == 0:
-                    res.append(_get_scalar_idx(s))
-                return [False, False]
-            else:
-                return [False, True]
-        elif type(s) in (Scalar, Ndarray):
-            if s.dobject_id == v.dobject_id:
-                if len(res) == 0:
-                    res.append([])
-
+        match s.__class__.__name__:
+            case 'Loop':
+                if _same_object(s.start, old):
+                    s.start = new
+                if _same_object(s.end, old):
+                    s.end = new
+                if _same_object(s.step, old):
+                    s.step = new
+            case 'FilterLoop':
+                if _same_object(s.cond, old):
+                    s.cond = new
+                if _same_object(s.start, old):
+                    s.start = new
+                if _same_object(s.end, old):
+                    s.end = new
+                if _same_object(s.step, old):
+                    s.step = new
+            case 'Expr':
+                if _same_object(s.left, old):
+                    s.left = new
+                if _same_object(s.right, old):
+                    s.right = new
+            case 'Assignment':
+                if _same_object(s.lhs, old):
+                    s.lhs = new
+                if _same_object(s.rhs, old):
+                    s.rhs = new
+            case 'Indexing':
+                # if same_object(s.dobject, old):
+                #     temp = s.dobject
+                #     idx_list =[s.idx]
+                #     while isinstance(temp, Indexing):
+                #         idx_list.append(temp.idx)
+                #         temp = temp.doibject
+                #     idx_list.reverse()
+                #     s.idx = new.idx
+                #     new_obj = new.dobject
+                #     for i in idx_list:
+                #         new_obj = Indexing(new_obj, i)
+                #     s.dobject = new_obj
+                # if same_object(s.idx, old):
+                #     s.idx = new
+                if _same_object(s.dobject, old):
+                    s.dobject = new
+                if _same_object(s.idx, old):
+                    s.idx = new
+            case 'Slice':
+                if _same_object(s.start, old):
+                    s.start = new
+                if _same_object(s.stop, old):
+                    s.stop = new
+                if _same_object(s.step, old):
+                    s.step = new
+            case 'Math':
+                if _same_object(s.val, old):
+                    s.val = new
+            case 'Code':
+                if _same_object(s.output[1], old):
+                    s.output = (s.output[0], new)
+                for k in s.inputs:
+                    if s.inputs[k] == old:
+                        s.inputs[k] = new
         return [True, True, True, True, True]
 
     t = IRTraversal(action)
     res = t(stmt)
-    if len(res) > 0:
-        return res[0]
-    else:
-        return None
 
 def apply_smem(node, eval, C, D):
     
@@ -78,11 +114,10 @@ def apply_smem(node, eval, C, D):
                 old_eval = lhs
                 
             elif len(node.eval.size) + parent_size == 2:
-                
                 to_replace = Ndarray(node.eval.dtype, [C, D])
                 to_replace.attr['smem'] = True
                 old_eval = lhs
-                
+            # print(lhs, codegen.gpu.to_string(lhs), to_replace, codegen.gpu.to_string(to_replace))
             def replace_decls(n, res):
                 for nn in n.ref_by:
                     replace_decls(nn, res)
@@ -90,7 +125,8 @@ def apply_smem(node, eval, C, D):
                 for d in n.decl:
                     v = d.dobject
                     replace_with = None
-                    if same_object(lhs, v) or (n.eval != eval and same_object(n.eval, v)):
+                    # print(lhs, v, codegen.gpu.to_string(v))
+                    if _same_object(lhs, v) or (n.eval != eval and _same_object(n.eval, v)):
                         replace_with = to_replace
                         if replace_with != None:
                             decl.append(Decl(replace_with))
@@ -132,7 +168,8 @@ def apply_smem(node, eval, C, D):
                             for i in range(len(idx)):
                                 if i<len(to_replace.size):
                                     new_var = Indexing(new_var, idx[i])
-                        replace_all_ref(n.compute, old_eval, new_var)
+                        # print(codegen.gpu.to_string(n.compute), codegen.gpu.to_string(new_var), codegen.gpu.to_string(old_eval))
+                        _replace_all_ref(n.compute, old_eval, new_var)
 
                 return [True, True, True, True, True]
             ASGTraversal(replace_refs)(node)
@@ -156,7 +193,6 @@ def gather_smem(node, C, D):
             if isinstance(stmt, IR) and 'reuse' in stmt.attr and stmt.attr['reuse']:
                 
                 res.append(stmt)
-                # print('<<<<', stmt, codegen.gpu.to_string(stmt), stmt.attr, res)
             return [True, True, True, True, True]
         x = IRTraversal(action)(s)
         return x
