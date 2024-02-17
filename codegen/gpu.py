@@ -48,9 +48,9 @@ def to_string(stmt):
                 #                 code += f'for (int off = blockDim.x/2; off > 0; off >>= 1) {{\n {to_string(stmt.attr["redu_res"])} += __shfl_down_sync(0xffffffff, {to_string(stmt.attr["redu_res"])}, off); \n}}\nif(threadIdx.x==0) {to_string(stmt.attr["redu_eval"])} = {to_string(stmt.attr["redu_res"])};\n__syncthreads();\n'
                 #             elif isinstance(stmt.attr['redu_res'], (ir.Ndarray, ir.Indexing)):
                 #                 code += f'__syncthreads();\nif(threadIdx.x==0) {to_string(stmt.attr["redu_eval"])} = {to_string(stmt.attr["redu_res"])};\n'
-            elif 'reduction' in stmt.attr and stmt.attr['reduction']:
-                assign = stmt.body[0]
-                code += f'for (int {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} > {to_string(stmt.end)}; {to_string(stmt.iterate)} >>= {to_string(stmt.step)}) {{\n {to_string(assign.rhs)} += __shfl_down_sync(0xffffffff, {to_string(assign.rhs)}, off); \n}}\n__syncthreads();\n'
+            # elif 'reduction' in stmt.attr and stmt.attr['reduction']:
+            #     assign = stmt.body[0]
+            #     code += f'for (int {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} > {to_string(stmt.end)}; {to_string(stmt.iterate)} >>= {to_string(stmt.step)}) {{\n {to_string(assign.rhs)} += __shfl_down_sync(0xffffffff, {to_string(assign.rhs)}, off); \n}}\n__syncthreads();\n'
             else:
                 code += f"for (int {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
                 for e in stmt.body:

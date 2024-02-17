@@ -95,8 +95,8 @@ class smem():
                 transform.cuda_smem.apply_smem(n, node.eval, self.C, self.D)
             
             if True:
-                transform.cuda_smem.gather_smem(n, self.C, self.D)
-                # pass
+                # transform.cuda_smem.gather_smem(n, self.C, self.D)
+                pass
 
         self.eval = node.eval
         t = ASGTraversal(action)
@@ -108,8 +108,8 @@ class smem():
 # transform.passes = [f]
 # transform.passes = [fuser(), tiler(16, 128)]
 # transform.passes = [fuser()]
-transform.passes = [fuser(), tiler(16, 64)]
-# transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
+# transform.passes = [fuser(), tiler(16, 64)]
+transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
 
 
 def transE():
@@ -248,8 +248,8 @@ def backward():
 
 if __name__ == "__main__":
     # transE()
-    transH()
+    # transH()
     # transR()
-    # transF()
+    transF()
     # RESCAL()
     # backward()
