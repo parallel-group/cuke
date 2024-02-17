@@ -84,8 +84,8 @@ def get_hash_key(vid, hash_table):
 
     key = Var(dtype='int')
     key.attr['is_arg'] = False
-    key = inline(src, ('KEY', key), \
-                        ('HASH_TABLE', hash_table), ('VID', vid))
+    key = inline(src, [('KEY', key)], \
+                        [('HASH_TABLE', hash_table), ('VID', vid)])
     return key
 
 def RapidMatch(pattern_file_name):
@@ -198,13 +198,13 @@ def RapidMatch(pattern_file_name):
     print(code)
 
 
-    torch_rowptr, torch_colidx, torch_edge_list, num_node, num_edges, num_jobs = read_graph(False)
+    # torch_rowptr, torch_colidx, torch_edge_list, num_node, num_edges, num_jobs = read_graph(False)
 
-    for i in range(num_core, num_query_node):
-        torch_label = torch.zeros([num_node, ], dtype=torch.int32)
-        torch_hash_table, torch_this_colidx= build_hasb_table(torch_rowptr, torch_label ,torch_colidx, plabel[i])
-    d = run.cpu.compile_and_run(code, num_jobs, torch_edge_list, num_node, torch_rowptr, num_edges, torch_colidx, torch_hash_table, torch_this_colidx)
-    print(d)
+    # for i in range(num_core, num_query_node):
+    #     torch_label = torch.zeros([num_node, ], dtype=torch.int32)
+    #     torch_hash_table, torch_this_colidx= build_hasb_table(torch_rowptr, torch_label ,torch_colidx, plabel[i])
+    # d = run.cpu.compile_and_run(code, num_jobs, torch_edge_list, num_node, torch_rowptr, num_edges, torch_colidx, torch_hash_table, torch_this_colidx)
+    # print(d)
 
 if __name__ == "__main__":
     RapidMatch(sys.argv[1])

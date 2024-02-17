@@ -95,10 +95,13 @@ def _replace_arrindex_with_scalar(ir, old, new):
         else:
             _replace_arrindex_with_scalar(ir.val, old, new)
     elif type(ir) == Code:
-        if type(ir.output[1]) in (Indexing, Scalar):
-            obj = get_obj(ir.output[1])
-            if obj.dobject_id == old.dobject_id:
-                ir.output = (ir.output[0], new)
+        for k in ir.outputs:
+            if type(ir.outputs[k]) in (Indexing, Scalar):
+                obj = get_obj(ir.outputs[k])
+                if obj.dobject_id == old.dobject_id:
+                    ir.outputs[k] = new
+        
+
         # TODO: replace inputs
 
 
@@ -233,7 +236,7 @@ def basic_rule(node, res):
             fuse_operators(node, node.input_orders[0], node.operators[0])
     
     elif type(node) == TensorOp and node.op_type == 'inline':
-        for i in range(2, len(node.operators), 2):
+        for i in range(3, len(node.operators), 2):
             if type(node.operators[i]) == TensorOp and node.operators[i].op_type in (elementwise_op + ['setval']):
                 assert len(node.operators[i]._size()) == 0
                 dfs = ir_find_defs(node.operators[i].compute, node.operators[i].eval)

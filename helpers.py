@@ -19,12 +19,19 @@ def same_object(a, b):
 
 # def same_object(a, b):
 #     if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
+#         if isinstance(a, ir.Indexing) or isinstance(b, ir.Indexing):
+#             return get_obj(a).dobject_id == get_obj(b).dobject_id
+#         return a.dobject_id == b.dobject_id
+#     return False
+
+# def same_object(a, b):
+#     if isinstance(a, ir.DObject) and isinstance(b, ir.DObject):
 #         return a.dobject_id == b.dobject_id
 #     return False
 
 
 def is_int_var(v):
-    return isinstance(v, asg.Tensor) and v.dtype == 'int' and len(v.ref_size) == 0
+    return isinstance(v, asg.Tensor) and v.dtype in asg.int_types and len(v.ref_size) == 0
 
 
 def is_scalar(v):
@@ -36,7 +43,7 @@ def is_1d_tensor(v):
 
 
 def is_1dint_tensor(v):
-    return is_1d_tensor(v) and v.dtype == 'int'
+    return is_1d_tensor(v) and v.dtype in asg.int_types
 
 
 def eval_const_expr(expr):
@@ -84,7 +91,7 @@ def has_same_value(e1, e2):
     elif type(e1) == asg.Var or type(e1) == asg.Tensor:
         return e1.id == e2.id
     elif type(e1) == asg.Const:
-        if e1.dtype == 'int' and e2.dtype == 'int':
+        if e1.dtype in asg.int_types and e2.dtype in asg.int_types:
             return e1.val == e2.val
         elif e1.dtype == 'slice' and e2.dtype == 'slice':
             return has_same_value(e1.val.start, e2.val.start) and has_same_value(e1.val.stop,
@@ -303,7 +310,8 @@ class IRTraversal:
         elif type(stmt) == ir.Code:
             cond = self.action(stmt, res)
             if cond[0]:
-                self._preorder_traverse(stmt.output[1], res)
+                for k in stmt.outputs:
+                    self._preorder_traverse(stmt.outputs[k], res)
             if cond[1]:
                 for k in stmt.inputs:
                     self._preorder_traverse(stmt.inputs[k], res)
@@ -369,8 +377,9 @@ def replace_all_ref(stmt, old, new):
                 if same_object(s.val, old):
                     s.val = new
             case 'Code':
-                if same_object(s.output[1], old):
-                    s.output = (s.output[0], new)
+                for k in s.outputs:
+                    if same_object(s.outputs[k], old):
+                        s.outputsk[k] = new
                 for k in s.inputs:
                     if s.inputs[k] == old:
                         s.inputs[k] = new
@@ -459,9 +468,10 @@ def ir_find_defs(stmt, data):
     def action(s, res):
         if type(s) == ir.Assignment and same_object(get_obj(s.lhs), data):
             res.append(s)
-        elif type(s) == ir.Code and same_object(get_obj(s.output[1]), data):
-            res.append(s)
-
+        elif type(s) == ir.Code:
+            for k in s.outputs:
+                if same_object(get_obj(s.outputs[k]), data):
+                     res.append(s)
         return [True, True, True, True, True]
 
     return IRTraversal(action)(stmt)

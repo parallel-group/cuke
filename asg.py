@@ -14,6 +14,8 @@ binary_elw = list(arith_op.keys()) + cmp_op
 unary_elw = math_op
 elementwise_op = binary_elw + unary_elw
 
+int_types = ['int', 'int32_t', 'int64_t']
+float_types = ['float', 'double']
 
 def bigger(x, y):
     return TensorOp('bigger', x, y)
@@ -41,8 +43,8 @@ def setval(res, val):
 def copy(left, right):
     left = setval(left, right)
 
-def inline(src, output, *inputs):
-    return TensorOp('inline', src, output, *inputs)
+def inline(src, output=[], inputs=[]):
+    return TensorOp('inline', src, len(output), *[*output, *inputs])
 
 def einsum(exp: str, tensor1, tensor2):
     return TensorOp('einsum', tensor1, tensor2, exp)
@@ -238,13 +240,17 @@ class TensorOp(Tensor):
         if op_type in arith_op or op_type in cmp_op:
             dtype = operators[0].dtype
             if type(self.operators[0]) == int:
-                self.operators[0] = Const(self.operators[0], 'int')
+                assert(dtype in int_types)
+                self.operators[0] = Const(self.operators[0], dtype)
             elif type(operators[0]) == float:
-                self.operators[0] = Const(self.operators[0], 'float')
+                assert(dtype in float_types)
+                self.operators[0] = Const(self.operators[0], dtype)
             if type(self.operators[1]) == int:
-                self.operators[1] = Const(self.operators[1], 'int')
+                assert(dtype in int_types)
+                self.operators[1] = Const(self.operators[1], dtype)
             elif type(operators[1]) == float:
-                self.operators[1] = Const(self.operators[1], 'float')
+                assert(dtype in float_types)
+                self.operators[1] = Const(self.operators[1], dtype)
             assert helpers.prefix_match_size(self.operators[0]._size(), self.operators[1]._size())
             if (len(self.operators[0]._size()) > len(self.operators[1]._size())):
                 ref_size = self.operators[0]._size()
@@ -275,35 +281,40 @@ class TensorOp(Tensor):
 
         elif op_type == 'index':
             dtype = operators[0].dtype
+            
             if not type(operators[1]) in (list, tuple):
                 self.operators[1] = [operators[1]]
             ref_size = self.operators[0]._size()[len(self.operators[1]):]
 
             new_size = []
             new_idx = []
+            size_dtype = operators[0]._size()[0].dtype
             for i in range(len(self.operators[1])):
                 idx = self.operators[1][i]
                 if type(idx) == slice:
                     start = idx.start
                     if start == None:
-                        start = Const(0, 'int')
+                        start = Const(0, size_dtype)
                     elif type(start) == int:
-                        start = Const(start, 'int')
+                        start = Const(start, size_dtype)
                     stop = idx.stop
                     if stop == None:
                         stop = self.operators[0].ref_size[i]
                     elif type(stop) == int:
-                        stop = Const(stop, 'int')
+                        stop = Const(stop, size_dtype)
                     step = idx.step
                     if step == None:
-                        step = Const(1, 'int')
+                        step = Const(1, size_dtype)
                     elif type(step) == int:
-                        step = Const(step, 'int')
+                        step = Const(step, size_dtype)
 
                     idx = Const(slice(start, stop, step), 'slice')
 
                     if step.val == 1:
-                        csize = [helpers.eval_const_expr(stop - start)]
+                        if type(start) == Const and start.val==0:
+                            csize = [helpers.eval_const_expr(stop)]
+                        else:
+                            csize = [helpers.eval_const_expr(stop - start)]
                     else:
                         csize = [helpers.eval_const_expr(stop - start) // step]
                 elif helpers.is_1dint_tensor(idx):
@@ -311,7 +322,7 @@ class TensorOp(Tensor):
                 elif helpers.is_int_var(idx) or type(idx) == int:
                     csize = []
                     if type(idx) == int:
-                        idx = Const(idx, 'int')
+                        idx = Const(idx, size_dtype)
                 else:
                     raise TypeError('index data type error!')
 
@@ -361,7 +372,7 @@ class TensorOp(Tensor):
             if cond != None:
                 assert helpers.is_1d_tensor(cond)
                 assert helpers.has_same_value(axis_size, cond._size()[0])
-                counter = Var(dtype='int')
+                counter = Var(dtype = self.operators[0]._size()[0].dtype)
                 counter.attr['is_arg'] = False
                 self.counter = setval(counter, 0)
                 self.operators.append(self.counter)
@@ -426,28 +437,35 @@ class TensorOp(Tensor):
             ref_size = self.operators[0]._size()
             if (helpers.is_scalar(self.operators[1])):
                 if type(self.operators[1]) == int:
-                    self.operators[1] = Const(self.operators[1], 'int')
+                    assert(dtype in int_types)
+                    self.operators[1] = Const(self.operators[1], dtype)
                 elif type(self.operators[1]) == float:
-                    self.operators[1] = Const(self.operators[1], 'float')
+                    assert(dtype in float_types)
+                    self.operators[1] = Const(self.operators[1], dtype)
 
             else:
                 assert self.operators[0].dtype == self.operators[1].dtype
 
         elif op_type == 'inline':
-            dtype = self.operators[1][1].dtype
-            ref_size = self.operators[1][1]._size()
+            src = self.operators[0]
+            if type(self.operators[1]) == int:
+                self.operators[1] = Const(self.operators[1], 'int')
+            num_output = self.operators[1]
+            
+            dtype = self.operators[2][1].dtype
+            ref_size = self.operators[2][1]._size()
 
             keyvalue = []
-            src = self.operators[0]
-            for op in self.operators[1:]:
+            for op in self.operators[2:]:
                 keyvalue.append(op[0])
                 keyvalue.append(op[1])
             self.operators.clear()
             self.operators.append(src)
+            self.operators.append(num_output)
             self.operators.extend(keyvalue)
 
         elif op_type == 'size':
-            dtype = 'int'
+            dtype = self.operators[0]._size()[0].dtype
             ref_size = []
             if type(self.operators[1]) == int:
                 self.operators[1] = Const(self.operators[1], 'int')

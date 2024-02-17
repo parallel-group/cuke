@@ -190,9 +190,11 @@ def gen_ir(node):
                 pre_loop.attr['output_axis'] = level
                 compute.append(pre_loop)
                 compute = pre_loop.body
-            assign = ir.Assignment(res, ir.Expr(lhs, rhs, op))
-            assign.attr['parent_loop'] = pre_loop
-            compute.append(assign)
+            
+            compute.append(ir.Assignment(res, ir.Expr(lhs, rhs, op)))
+            # assign = ir.Assignment(res, ir.Expr(lhs, rhs, op))
+            # assign.attr['parent_loop'] = pre_loop
+            # compute.append(assign)
 
         elif node.op_type in asg.math_op:
             gen_ir(node.operators[0])
@@ -511,7 +513,7 @@ def gen_ir(node):
                     l = l.body[-1]
                 helpers.rebind_iterate(l.lhs, outer_loop.iterate, counter)
                 node.attr['eval'] = node.eval
-                node.eval = bind(node.eval, [ir.Slice(ir.Literal(0, 'int'), counter, ir.Literal(1, 'int'))])
+                node.eval = bind(node.eval, [ir.Slice(ir.Literal(0, counter.dtype), counter, ir.Literal(1, counter.dtype))])
                 node.attr['is_set'] = True
             elif 'is_set' in node.operators[1].attr:
                 size[primary_axis] = node.operators[1].eval.size[primary_axis]
@@ -640,20 +642,26 @@ def gen_ir(node):
 
         elif node.op_type == 'inline':
             src = node.operators[0]
-            keyvalue = []
+            num_output = node.operators[1].val
+            outputs_keyvalue = []
+            inputs_keyvalue = []
             for i in range(2, len(node.operators), 2):
-                gen_ir(node.operators[i])
-                keyvalue.append((node.operators[i-1], node.operators[i].eval))
-
-            node.eval = node.operators[2].eval
-            node.compute = [ir.Code(src, keyvalue[0], dict(keyvalue[1:]))]
+                gen_ir(node.operators[i+1])
+                if i<=num_output*2:
+                    gen_ir(node.operators[i+1])
+                    outputs_keyvalue.append((node.operators[i], node.operators[i+1].eval))
+                else:
+                    gen_ir(node.operators[i+1])
+                    inputs_keyvalue.append((node.operators[i], node.operators[i+1].eval))
+            node.eval = node.operators[3].eval
+            node.compute = [ir.Code(src, dict(outputs_keyvalue), dict(inputs_keyvalue))]
 
         elif node.op_type == 'size':
             gen_ir(node.operators[0])
             gen_ir(node.operators[1])
 
             axis = node.operators[1].eval.val
-            node.eval = ir.Scalar('int')
+            node.eval = ir.Scalar(node.operators[0]._size()[0].dtype)
             node.decl = [ir.Decl(node.eval)]
             node.compute = [ir.Assignment(node.eval, node.operators[0].eval.size[axis])]
 
