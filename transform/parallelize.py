@@ -167,7 +167,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
             return [True, True, True, True, True]
 
         assigns = IRTraversal(get_assigns)(loop)
-        # assigns = assigns[:-1]
+        
         def get_vars(n, res):
             res.extend([d.dobject for d in n.decl])
 
@@ -208,7 +208,8 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                 if replace_with != None:
                     decl.append(Decl(replace_with))
                     if same_object(v, n.eval):
-                        n.eval = replace_with
+                        if n != node:
+                            n.eval = replace_with
                 else:
                     decl.append(d)
             n.decl = decl
@@ -249,37 +250,44 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         else:
                             continue
                     if isinstance(redu_eval, (Ndarray, Indexing)):
-                        new_res = Ndarray(redu_eval.dtype, get_obj(redu_eval).size[1:])
+                        inter_res = None
+                        redu_arr = get_obj(redu_eval)
                         
-                        node.decl.append(Decl(new_res))
+                        for key in to_replace:
+                            if to_replace[key][0] == redu_arr:
+                                inter_res = key
+                        if inter_res is None:
+                            inter_res = Ndarray(redu_eval.dtype, get_obj(redu_eval).size[1:])
+                        
+                        node.decl.append(Decl(inter_res))
                         ids = []
                         temp = redu_eval
                         while isinstance(temp, Indexing):
                             ids.append(temp.idx)
                             temp = temp.dobject
                         ids = ids[:-1]
-                        ids = ids[::-1]
+                        # ids = ids[::-1]
                         for i in ids:
-                            new_res = Indexing(new_res, i)
+                            inter_res = Indexing(inter_res, i)
                         
                         redu_loop = Loop(0, s.attr['nprocs'][-1][0], 1, [])
-                        ids.insert(0, redu_loop.iterate)
+                        ids.append(redu_loop.iterate)
                         
                         for i in ids:
                             temp = Indexing(temp, i)
-                        s.attr['redu_res'] = new_res
-                        # replace_all_ref(s, redu_eval, new_res)
+                        s.attr['redu_res'] = inter_res
+                        
                         s.attr['redu_eval'] = redu_eval
                         if len(s.attr['nprocs']) > 1:
                             outerloop = s.attr['nprocs'][-2][1]
                         else:
                             outerloop = s.attr['nprocs'][-1][1]
                         
-                        redu_loop.body.append(Assignment(new_res, temp, '+'))
+                        redu_loop.body.append(Assignment(inter_res, temp, '+'))
                         redu_loop.attr['reduction'] = True
-                        # redu_assign = Assignment(redu_eval, new_res)
-                        # replace_all_ref(n.compute, redu_eval, new_res)
-                        res.append([redu_eval, new_res, s, redu_loop])
+                        # used for check if this is partial result
+                        redu_arr.attr['partial_res'] = True
+                        res.append([redu_eval, inter_res, s, redu_loop])
                         
                         pos = []
                         _is_in_loopbody(s.attr['parent_loop'], outerloop.body, pos)
