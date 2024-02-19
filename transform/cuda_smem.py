@@ -81,29 +81,19 @@ def _replace_all_ref(stmt, old, new):
     res = t(stmt)
 
 def apply_smem(node, eval, attr=''):
-    C=16
-    D=64
-    
-    parent_size = 0
-    for i in node.ref_by:
-        if i.op_type == 'apply':
-            parent_size = 1
-
-    
+   
     scope = flatten(node.compute)
 
     def get_assigns(s, res):
         if type(s) in (Assignment, Code):
             res.append(s)
         return [True, True, True, True, True]
-    # print(codegen.gpu.to_string(scope))
+    
     assigns = IRTraversal(get_assigns)(scope)
-    print(assigns, codegen.gpu.to_string(assigns))
-    lhs = None
+    
     lhs_list = []
     for s in assigns:
         if type(s) == Assignment:
-            # lhs = s.lhs 
             if not _same_object(s.lhs, eval) and s.lhs not in lhs_list:
                 lhs_list.append(s.lhs)
     
@@ -174,8 +164,7 @@ def apply_smem(node, eval, attr=''):
             
             if 'smem' in arr_replace.attr and arr_replace.attr['smem']:
                 continue
-            print(codegen.gpu.to_string(lhs), codegen.gpu.to_string(eval), not same_object(lhs, eval), arr_replace.size, arr_replace.attr)
-            
+        
             if (attr != '' and 'mem_opt' in arr_replace.attr) or (attr == '' and 'mem_opt' not in arr_replace.attr):
                 if attr != '' and arr_replace.attr['mem_opt'] == attr:
                     # replace mem to smem
