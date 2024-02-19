@@ -91,8 +91,9 @@ class smem():
 
     def __call__(self, node):
         def action(n, res):
-            if 'is_arg' in n.eval.attr and not n.eval.attr['is_arg'] and n.eval != self.eval:
-                transform.cuda_smem.apply_smem(n, node.eval, self.C, self.D)
+            # if 'is_arg' in n.eval.attr and not n.eval.attr['is_arg'] and n.eval != self.eval:
+            transform.cuda_smem.apply_smem(n, node.eval, '')
+            transform.cuda_smem.apply_smem(n, node.eval, 'partial_res')
             
             if True:
                 # transform.cuda_smem.gather_smem(n, self.C, self.D)
@@ -108,8 +109,8 @@ class smem():
 # transform.passes = [f]
 # transform.passes = [fuser(), tiler(16, 128)]
 # transform.passes = [fuser()]
-# transform.passes = [fuser(), tiler(16, 64)]
-transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
+transform.passes = [fuser(), tiler(16, 64)]
+# transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
 
 
 def transE():
@@ -250,6 +251,6 @@ if __name__ == "__main__":
     # transE()
     # transH()
     # transR()
-    transF()
-    # RESCAL()
+    # transF()
+    RESCAL()
     # backward()

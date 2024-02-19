@@ -80,7 +80,9 @@ def _replace_all_ref(stmt, old, new):
     t = IRTraversal(action)
     res = t(stmt)
 
-def apply_smem(node, eval, C, D):
+def apply_smem(node, eval, attr=''):
+    C=16
+    D=64
     
     parent_size = 0
     for i in node.ref_by:
@@ -94,30 +96,23 @@ def apply_smem(node, eval, C, D):
         if type(s) in (Assignment, Code):
             res.append(s)
         return [True, True, True, True, True]
-    
+    # print(codegen.gpu.to_string(scope))
     assigns = IRTraversal(get_assigns)(scope)
-    
+    print(assigns, codegen.gpu.to_string(assigns))
     lhs = None
+    lhs_list = []
     for s in assigns:
         if type(s) == Assignment:
-            lhs = s.lhs 
-            break
+            # lhs = s.lhs 
+            if not _same_object(s.lhs, eval) and s.lhs not in lhs_list:
+                lhs_list.append(s.lhs)
     
-    if lhs:
-        if node.eval != eval and not same_object(lhs, eval):
-            to_replace = None
-            old_eval = None
+    def replace_smem(node, lhs):
+        if not same_object(lhs, eval):
+            to_replace = Ndarray(arr_replace.dtype, arr_replace.size[1:])
+            to_replace.attr['smem'] = True
+            old_eval = lhs
             
-            if len(node.eval.size) + parent_size == 1:
-                to_replace = Ndarray(node.eval.dtype, [C])
-                to_replace.attr['smem'] = True
-                old_eval = lhs
-                
-            elif len(node.eval.size) + parent_size == 2:
-                to_replace = Ndarray(node.eval.dtype, [C, D])
-                to_replace.attr['smem'] = True
-                old_eval = lhs
-            # print(lhs, codegen.gpu.to_string(lhs), to_replace, codegen.gpu.to_string(to_replace))
             def replace_decls(n, res):
                 for nn in n.ref_by:
                     replace_decls(nn, res)
@@ -125,7 +120,7 @@ def apply_smem(node, eval, C, D):
                 for d in n.decl:
                     v = d.dobject
                     replace_with = None
-                    # print(lhs, v, codegen.gpu.to_string(v))
+
                     if _same_object(lhs, v) or (n.eval != eval and _same_object(n.eval, v)):
                         replace_with = to_replace
                         if replace_with != None:
@@ -168,11 +163,27 @@ def apply_smem(node, eval, C, D):
                             for i in range(len(idx)):
                                 if i<len(to_replace.size):
                                     new_var = Indexing(new_var, idx[i])
-                        # print(codegen.gpu.to_string(n.compute), codegen.gpu.to_string(new_var), codegen.gpu.to_string(old_eval))
                         _replace_all_ref(n.compute, old_eval, new_var)
 
                 return [True, True, True, True, True]
             ASGTraversal(replace_refs)(node)
+
+    for lhs in lhs_list:
+        if lhs:
+            arr_replace = get_obj(lhs)
+            
+            if 'smem' in arr_replace.attr and arr_replace.attr['smem']:
+                continue
+            print(codegen.gpu.to_string(lhs), codegen.gpu.to_string(eval), not same_object(lhs, eval), arr_replace.size, arr_replace.attr)
+            
+            if (attr != '' and 'mem_opt' in arr_replace.attr) or (attr == '' and 'mem_opt' not in arr_replace.attr):
+                if attr != '' and arr_replace.attr['mem_opt'] == attr:
+                    # replace mem to smem
+                    replace_smem(node, lhs)
+                elif attr == '':
+                    replace_smem(node,lhs)
+
+            
 
 
 
