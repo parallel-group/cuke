@@ -108,8 +108,8 @@ class smem():
 # transform.passes = [f, tiler(16, 128), parallelizer([80, 8, 32])]
 # transform.passes = [f]
 # transform.passes = [fuser(), tiler(16, 128)]
-# transform.passes = [fuser()]
-transform.passes = [fuser(), tiler(16, 64)]
+transform.passes = [fuser()]
+# transform.passes = [fuser(), tiler(16, 64)]
 # transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
 
 
@@ -251,6 +251,6 @@ if __name__ == "__main__":
     # transE()
     # transH()
     # transR()
-    transF()
-    # RESCAL()
+    # transF()
+    RESCAL()
     # backward()
