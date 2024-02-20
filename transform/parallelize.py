@@ -204,12 +204,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                             for l in loop.attr['nprocs']:
                                 indexed = False
                                 for ii in idx:
-                                    if ('loop' in ii.attr and ('output_axis' in l[1].attr and l[1].attr['output_axis'] == ii.attr['loop'].attr['output_axis']) or same_object(ii, l[1].iterate)): # or ('ploop' in ii.attr and ii.attr['ploop'] == l[1]):
-                                        # print('loop' in ii.attr)
-                                        # print(('output_axis' in l[1].attr and l[1].attr['output_axis'] == ii.attr['loop'].attr['output_axis']))
-                                        # print(codegen.cpu.to_string(ii))
-                                        # print(codegen.cpu.to_string(l[1].iterate))
-                                        # print(same_object(ii, l[1].iterate))
+                                    if ('loop' in ii.attr and ('output_axis' in l[1].attr and l[1].attr['output_axis'] == ii.attr['loop'].attr['output_axis']) or same_object(ii, l[1].iterate)):
                                         indexed = True
                                         break
                                 if not indexed:
@@ -253,7 +248,6 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         new_var = Indexing(new_var, idx)
                         if i<len(to_replace[s][1])-1:
                             old_var = Indexing(old_var, idx)
-
                     # print(codegen.cpu.to_string(old_var))
                     # print(codegen.cpu.to_string(new_var))
                     _replace_all_ref(n.compute, old_var, new_var)
@@ -323,21 +317,45 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                             outerloop = s.attr['nprocs'][-1][1]
                         
                         redu_loop.body.append(Assignment(inter_res, temp, '+'))
+
                         redu_loop.attr['reduction'] = True
                         # used for check if this is partial result
                         redu_arr.attr['partial_res'] = True
                         res.append([redu_eval, inter_res, s, redu_loop])
                         
                         pos = []
-                        _is_in_loopbody(s.attr['parent_loop'], outerloop.body, pos)
-                        # _is_in_loopbody(outerloop, node.compute, pos)
-                        temp = outerloop.body
+                        if 'parent_loop' in s.attr:
+                            _is_in_loopbody(s.attr['parent_loop'], outerloop.body, pos)
+                            temp = outerloop.body
+                            if len(pos) > 0:
+                                for i in range(len(pos)-1):
+                                    temp = temp[pos[i]]
+                                # temp.insert(pos[-1]+1, redu_assign)
+                                temp.insert(pos[-1]+1, redu_loop)
+                        else:
+                            init_loop = Loop(0, s.attr['nprocs'][-1][0], 1, [])
+                            ids[num_ext-1] = init_loop.iterate
+                            temp2 = redu_arr
+                            for i in ids:
+                                temp2 = Indexing(temp2, i)
+                            init_loop.body.append(Assignment(temp2, 0))
+                            _is_in_loopbody(outerloop, node.compute, pos)
+                            temp = node.compute  
 
-                        if len(pos) > 0:
-                            for i in range(len(pos)-1):
-                                temp = temp[pos[i]]
-                            # temp.insert(pos[-1]+1, redu_assign)
-                            temp.insert(pos[-1]+1, redu_loop)
+                            if len(pos) > 0:
+                                for i in range(len(pos)-1):
+                                    temp = temp[pos[i]]
+                                # temp.insert(pos[-1]+1, redu_assign)
+                                temp.insert(pos[-1]+1, redu_loop)
+                                temp.insert(pos[-1], init_loop)   
+                            
+                            def delete_init(n, res):
+                                for stmt in n.compute:
+                                    if type(stmt)==Assignment and _same_object(stmt.lhs.dobject, redu_arr):
+                                        n.compute.remove(stmt)
+                                    
+                            ASGTraversal(delete_init)(node)                      
+
                 return [True, True, True, True, True]
             
             def _replace_follow_irs(stmt, start_loop, redu_loop, old, new):
