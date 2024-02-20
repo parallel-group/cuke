@@ -199,9 +199,9 @@ def transF():
     vr = Remb[r]
 
     res = bvv(vh, vt) - bvv(vh - vt, vr)
-    # code = codegen.cpu.print_cpp(gen_ir(res))
+    code = codegen.cpu.print_cpp(gen_ir(res))
     # print(code)
-    code = codegen.gpu.print_cuda(gen_ir(res))
+    # code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
 
@@ -251,6 +251,6 @@ if __name__ == "__main__":
     # transE()
     # transH()
     # transR()
-    # transF()
-    RESCAL()
+    transF()
+    # RESCAL()
     # backward()

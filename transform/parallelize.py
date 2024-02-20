@@ -202,17 +202,17 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                             ext_size = []
                             loop_info = []
                             for l in loop.attr['nprocs']:
-                                # indexed = False
-                                # for ii in idx:
-                                #     if ('loop' in ii.attr and ('output_axis' in l[1].attr and l[1].attr['output_axis'] == ii.attr['loop'].attr['output_axis']) or same_object(ii, l[1].iterate)): # or ('ploop' in ii.attr and ii.attr['ploop'] == l[1]):
-                                #         # print('loop' in ii.attr)
-                                #         # print(('output_axis' in l[1].attr and l[1].attr['output_axis'] == ii.attr['loop'].attr['output_axis']))
-                                #         print(codegen.cpu.to_string(ii))
-                                #         print(codegen.cpu.to_string(l[1].iterate))
-                                #         print(same_object(ii, l[1].iterate))
-                                #         indexed = True
-                                #         break
-                                # if not indexed:
+                                indexed = False
+                                for ii in idx:
+                                    if ('loop' in ii.attr and ('output_axis' in l[1].attr and l[1].attr['output_axis'] == ii.attr['loop'].attr['output_axis']) or same_object(ii, l[1].iterate)): # or ('ploop' in ii.attr and ii.attr['ploop'] == l[1]):
+                                        # print('loop' in ii.attr)
+                                        # print(('output_axis' in l[1].attr and l[1].attr['output_axis'] == ii.attr['loop'].attr['output_axis']))
+                                        # print(codegen.cpu.to_string(ii))
+                                        # print(codegen.cpu.to_string(l[1].iterate))
+                                        # print(same_object(ii, l[1].iterate))
+                                        indexed = True
+                                        break
+                                if not indexed:
                                     ext_size.append(l[0])
                                     loop_info.append(l[1])
                                    
