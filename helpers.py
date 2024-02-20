@@ -379,7 +379,7 @@ def replace_all_ref(stmt, old, new):
             case 'Code':
                 for k in s.outputs:
                     if same_object(s.outputs[k], old):
-                        s.outputsk[k] = new
+                        s.outputs[k] = new
                 for k in s.inputs:
                     if s.inputs[k] == old:
                         s.inputs[k] = new

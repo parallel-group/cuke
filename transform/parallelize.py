@@ -5,6 +5,7 @@ from ir import *
 import codegen
 from asg2ir import gen_ir
 
+
 def _get_ref_idx(stmt, v):
     def _get_scalar_idx(idx):
         assert type(idx) == Indexing
@@ -43,10 +44,24 @@ def _get_ref_idx(stmt, v):
     else:
         return None
 
+# def _same_object(a, b):
+#     if isinstance(a, DObject) and isinstance(b, DObject):
+#         return get_obj(a).dobject_id == get_obj(b).dobject_id
+#     return False
+
 def _same_object(a, b):
-    if isinstance(a, DObject) and isinstance(b, DObject):
-        return get_obj(a).dobject_id == get_obj(b).dobject_id
-    return False
+    if type(a) != type(b):
+        return False
+    elif type(a)==Indexing and type(b)==Indexing:
+        return _same_object(a.dobject, b.dobject) and _same_object(a.idx, b.idx)
+    elif type(a)==Slice and type(b)==Slice:
+        return same_object(a.start, b.start) and same_object(a.end, b.end) and same_object(a.step, b.step)
+    elif type(a)==Scalar and type(b)==Scalar:
+        return a.name()==b.name()
+    elif type(a)==Ndarray and type(b)==Ndarray:
+        return a.name()==b.name()
+    else:    
+        return same_object(a, b)
 
 def _replace_all_ref(stmt, old, new):
     def action(s, res):
@@ -107,10 +122,11 @@ def _replace_all_ref(stmt, old, new):
                 if _same_object(s.val, old):
                     s.val = new
             case 'Code':
-                if _same_object(s.output[1], old):
-                    s.output = (s.output[0], new)
+                for k in s.outputs:
+                    if _same_object(s.outputs[k], old):
+                        s.outputs[k] = new
                 for k in s.inputs:
-                    if s.inputs[k] == old:
+                    if _same_object(s.inputs[k], old):
                         s.inputs[k] = new
         return [True, True, True, True, True]
 
@@ -141,6 +157,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
             scope = (flatten(loop.cond_body) if type(loop) == FilterLoop else []) + flatten(loop.body)
 
     if loop != None:
+
         loop.attr['plevel'] = len(nprocs)
         loop.attr['nprocs'] = nprocs + [(num_procs, loop)]
 
@@ -158,43 +175,50 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                 return [False, False, False, True, True]
 
             return [False, False, False, False, False]
-
         IRTraversal(set_nprocs)(loop)
 
         def get_assigns(s, res):
             if type(s) in (Assignment, Code):
                 res.append(s)
             return [True, True, True, True, True]
-
         assigns = IRTraversal(get_assigns)(loop)
         
         def get_vars(n, res):
             res.extend([d.dobject for d in n.decl])
-
         all_vars = ASGTraversal(get_vars)(node)
+
         to_replace = {}
         for s in assigns:
             for v in all_vars:
                 if v not in to_replace:
-                    lhs = s.lhs if type(s) == Assignment else s.output
-                    idx = _get_ref_idx(lhs, v)
-                    if idx != None:
-                        ext_size = []
-                        loop_info = []
-                        for l in loop.attr['nprocs']:
-                            indexed = False
-                            for ii in idx:
-                                if ('loop' in ii.attr and ('output_axis' in l[1].attr and l[1].attr['output_axis'] ==
-                                                           ii.attr['loop'].attr['output_axis']) or same_object(ii, l[
-                                    1].iterate))  or ('ploop' in ii.attr and ii.attr['ploop'] == l[1]):
-                                    indexed = True
-                                    break
-                            if not indexed:
-                                ext_size.append(l[0])
-                                loop_info.append(l[1])
-                        
-                        if len(ext_size) > 0:
-                            to_replace[v] = (Ndarray(v.dtype, ext_size + v.size), loop_info)
+                    if type(s) == Assignment:
+                        lhs_list = [s.lhs]
+                    elif type(s) ==Code:
+                        lhs_list = list(s.outputs.values())
+                    
+                    for lhs in lhs_list:
+                        idx = _get_ref_idx(lhs, v)
+                        if idx != None:                            
+                            ext_size = []
+                            loop_info = []
+                            for l in loop.attr['nprocs']:
+                                # indexed = False
+                                # for ii in idx:
+                                #     if ('loop' in ii.attr and ('output_axis' in l[1].attr and l[1].attr['output_axis'] == ii.attr['loop'].attr['output_axis']) or same_object(ii, l[1].iterate)): # or ('ploop' in ii.attr and ii.attr['ploop'] == l[1]):
+                                #         # print('loop' in ii.attr)
+                                #         # print(('output_axis' in l[1].attr and l[1].attr['output_axis'] == ii.attr['loop'].attr['output_axis']))
+                                #         print(codegen.cpu.to_string(ii))
+                                #         print(codegen.cpu.to_string(l[1].iterate))
+                                #         print(same_object(ii, l[1].iterate))
+                                #         indexed = True
+                                #         break
+                                # if not indexed:
+                                    ext_size.append(l[0])
+                                    loop_info.append(l[1])
+                                   
+                            if len(ext_size) > 0:
+                                num_ext = len(ext_size)
+                                to_replace[v] = (Ndarray(v.dtype, ext_size + v.size[num_ext-1:]), loop_info)
         
         def replace_decls(n, res):
             decl = []
@@ -219,12 +243,20 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
         def replace_refs(n, res):
             if len(n.compute) > 0:
                 for s in to_replace:
+
+                    old_var = s
                     new_var = to_replace[s][0]
-                    for l in to_replace[s][1]:
-                        idx = Literal(f"tid{l.attr['plevel']}", 'int')
+                    for i in range(len(to_replace[s][1])):
+                        l = to_replace[s][1][i]
+                        idx = Scalar('int', f"tid{l.attr['plevel']}", )
                         idx.attr['ploop'] = l
                         new_var = Indexing(new_var, idx)
-                    replace_all_ref(n.compute, s, new_var)
+                        if i<len(to_replace[s][1])-1:
+                            old_var = Indexing(old_var, idx)
+
+                    # print(codegen.cpu.to_string(old_var))
+                    # print(codegen.cpu.to_string(new_var))
+                    _replace_all_ref(n.compute, old_var, new_var)
 
         ASGTraversal(replace_refs)(node)
 
@@ -245,7 +277,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                 if isinstance(s, Loop) and 'ptype' in s.attr and s.attr['ptype'] == 'reduction' and 'plevel' in s.attr and 'redu_res' not in s.attr:
                     redu_eval = None
                     for ass in s.body:
-                        if type(ass) == Assignment:
+                        if type(ass) == Assignment: 
                             redu_eval = ass.lhs 
                         else:
                             continue
@@ -265,7 +297,9 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         while isinstance(temp, Indexing):
                             ids.append(temp.idx)
                             temp = temp.dobject
-                        ids = ids[:-1]
+                        ids = ids[:-1]  
+
+                        # A[tid0][Asize]
                         # ids = ids[::-1]
                         for i in ids:
                             inter_res = Indexing(inter_res, i)
@@ -288,9 +322,12 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         # used for check if this is partial result
                         redu_arr.attr['partial_res'] = True
                         res.append([redu_eval, inter_res, s, redu_loop])
+                        print("reduction!!")
+                        print(codegen.cpu.to_string(redu_loop))
                         
                         pos = []
                         _is_in_loopbody(s.attr['parent_loop'], outerloop.body, pos)
+                        # _is_in_loopbody(outerloop, node.compute, pos)
                         temp = outerloop.body
 
                         if len(pos) > 0:
@@ -332,6 +369,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
 def parallelize_level(node, num_procs, level):
     loops = []
     get_loops_at_level(node.compute, level, [], loops)
+    print(loops)
     for l in loops:
         parallelize_loop(node, num_procs, l)
 
