@@ -322,8 +322,6 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         # used for check if this is partial result
                         redu_arr.attr['partial_res'] = True
                         res.append([redu_eval, inter_res, s, redu_loop])
-                        print("reduction!!")
-                        print(codegen.cpu.to_string(redu_loop))
                         
                         pos = []
                         _is_in_loopbody(s.attr['parent_loop'], outerloop.body, pos)
@@ -369,7 +367,6 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
 def parallelize_level(node, num_procs, level):
     loops = []
     get_loops_at_level(node.compute, level, [], loops)
-    print(loops)
     for l in loops:
         parallelize_loop(node, num_procs, l)
 
