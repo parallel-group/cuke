@@ -84,7 +84,7 @@ torch::Tensor apply__apply__index_Eembdqvftaiq(int batch_size, int dim, int nnod
 }
 
 
-torch::Tensor apply__apply__index_Eembjsfnloja(int batch_size, int dim, int nnodes, torch::Tensor obj_Eemb, torch::Tensor obj_h, int nedges, torch::Tensor obj_Proj, torch::Tensor obj_r, torch::Tensor obj_t)
+torch::Tensor apply__apply__index_Eembdzdewfpz(int batch_size, int dim, int nnodes, torch::Tensor obj_Eemb, torch::Tensor obj_h, int nedges, torch::Tensor obj_Proj, torch::Tensor obj_r, torch::Tensor obj_t)
 {
     auto Eemb = obj_Eemb.accessor<float, 2>();
     auto h = obj_h.accessor<int, 1>();
@@ -102,8 +102,13 @@ torch::Tensor apply__apply__index_Eembjsfnloja(int batch_size, int dim, int nnod
         #pragma omp parallel for num_threads(16)
         for (int _l6 = _l5; _l6 < ((_l5 + 16) < batch_size ? ((_l5 + 16)) : (batch_size)); _l6 += 1) {
             arr92[tid0][tid1][tid2][_l6] = 0;
+
+
             for (int _l7 = 0; _l7 < dim; _l7 += 64) {
+
+                #pragma omp parallel for num_threads(32)
                 for (int _l8 = _l7; _l8 < ((_l7 + 64) < dim ? ((_l7 + 64)) : (dim)); _l8 += 1) {
+                    
                     arr91[tid0][tid1][tid2] = 0;
                     for (int _l2 = 0; _l2 < dim; _l2 += 1) {
                         arr91[tid0][tid1][tid2] += (Eemb[h[_l6]][_l2] * Proj[r[_l6]][_l2][_l8]);
@@ -112,10 +117,14 @@ torch::Tensor apply__apply__index_Eembjsfnloja(int batch_size, int dim, int nnod
                 } 
             } 
             for (int64_t _l9 = 0; _l9 < 32; _l9 += 1) {
-                arr57[_l6][tid2][tid1] += arr92[_l6][tid2][tid1][_l9];
+                arr57[tid0][tid1][_l6] += arr92[tid0][tid1][_l9][_l6];
             } 
         } 
+
+
     } 
+
+
     return obj_arr38;
 
 }
