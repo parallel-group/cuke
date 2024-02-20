@@ -18,6 +18,8 @@ def get_dtype(expr):
         return get_dtype(expr.left)
     elif isinstance(expr, ir.DObject):
         return expr.dtype
+    else:
+        return 'int64_t'
 
 def to_string(stmt):
     match stmt.__class__.__name__:

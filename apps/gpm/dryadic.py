@@ -8,9 +8,34 @@ import transform
 from asg import *
 from asg2ir import gen_ir
 from transform import parallelize
+from helpers import new_op, ASGTraversal
 
 from apps.gpm.utils import *
 from apps.gpm.setop import *
+
+
+class fuser:
+    def __init__(self):
+        self.rules = [transform.fuse.basic_rule]
+
+    def __call__(self, node):
+        def action(node, res):
+            for r in self.rules:
+                r(node, res)
+
+        t = ASGTraversal(action)
+        t(node)
+        return node
+
+class parallelize():
+    def __init__(self):
+        self.rules = []
+
+    def __call__(self, node):
+        transform.parallelize.parallelize_loop(node, 64, [0])
+        return node
+
+transform.passes = [fuser(), parallelize()]
 
 def DryadicVertexInduced(pattern_file_name):
 
