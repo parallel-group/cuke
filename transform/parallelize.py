@@ -288,16 +288,20 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         for key in to_replace:
                             if to_replace[key][0] == redu_arr:
                                 inter_res = key
+                                num_ext = len(to_replace[key][1])
                         if inter_res is None:
-                            inter_res = Ndarray(redu_eval.dtype, get_obj(redu_eval).size[1:])
+                            num_ext = len(to_replace[key][1])
+                            inter_res = Ndarray(redu_eval.dtype, get_obj(redu_eval).size[:num_ext-1]+ get_obj(redu_eval).size[num_ext:])
                         
                         node.decl.append(Decl(inter_res))
                         ids = []
                         temp = redu_eval
                         while isinstance(temp, Indexing):
-                            ids.append(temp.idx)
+                            ids.insert(0, temp.idx)
+                            #ids.append(temp.idx)
                             temp = temp.dobject
-                        ids = ids[:-1]  
+                        #ids = ids[:-1] 
+                        ids = ids[:num_ext-1]+ids[num_ext:]
 
                         # A[tid0][Asize]
                         # ids = ids[::-1]
@@ -305,7 +309,8 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                             inter_res = Indexing(inter_res, i)
                         
                         redu_loop = Loop(0, s.attr['nprocs'][-1][0], 1, [])
-                        ids.append(redu_loop.iterate)
+                        ids.insert(num_ext-1, redu_loop.iterate)
+                        #ids.append(redu_loop.iterate)
                         
                         for i in ids:
                             temp = Indexing(temp, i)
