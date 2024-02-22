@@ -93,7 +93,7 @@ class smem():
             if type(n) == TensorOp:
                 if 'op_name' in n.attr and n.attr['op_name'] in ('bvv', 'bsv', 'bmv'):
                     transform.cuda_smem.add_direct_cache(n.eval, node) # this function should 1) create a shared memory tensor for n.eval, 2) change all reference to the shared memory tensor for code in the scope of node, 3) handle both reduction ore non-reduction data
-                if n.op_type == 'index' and 'reuse' in n.operators[1][0].attr and n.operators[1][0].attr['ruse'] == True:
+                if n.op_type == 'index' and 'reuse' in n.operators[1][0].attr and n.operators[1][0].attr['reuse'] == True:
                     transform.cuda_smem.add_indirect_cache(n.eval, node) # this function should 1) create a shared memory tensor for n.eval, 2) analyze n.eval.idx to get buf_idx/uniq_idx, 3) change all reference based on buf_idx/uniq_idx for code in the scope of node
 
         self.eval = node.eval
