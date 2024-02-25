@@ -85,19 +85,16 @@ class tiler():
         return node
 
 class smem():
-    def __init__(self, C, D):
-        self.C = C
-        self.D = D
+    def __init__(self):
+        pass
 
     def __call__(self, node):
         def action(n, res):
-            # if 'is_arg' in n.eval.attr and not n.eval.attr['is_arg'] and n.eval != self.eval:
-            transform.cuda_smem.apply_smem(n, node.eval, '')
-            transform.cuda_smem.apply_smem(n, node.eval, 'partial_res')
-            
-            if True:
-                # transform.cuda_smem.gather_smem(n, self.C, self.D)
-                pass
+            if type(n) == TensorOp:
+                if 'op_name' in n.attr and n.attr['op_name'] in ('bvv', 'bsv', 'bmv'):
+                    transform.cuda_smem.add_direct_cache(n.eval, node) # this function should 1) create a shared memory tensor for n.eval, 2) change all reference to the shared memory tensor for code in the scope of node, 3) handle both reduction ore non-reduction data
+                if n.op_type == 'index' and 'reuse' in n.operators[1][0].attr and n.operators[1][0].attr['reuse'] == True:
+                    transform.cuda_smem.add_indirect_cache(n.eval, node) # this function should 1) create a shared memory tensor for n.eval, 2) analyze n.eval.idx to get buf_idx/uniq_idx, 3) change all reference based on buf_idx/uniq_idx for code in the scope of node
 
         self.eval = node.eval
         t = ASGTraversal(action)
