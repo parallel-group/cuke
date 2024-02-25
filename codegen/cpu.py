@@ -37,7 +37,7 @@ def to_string(stmt):
                 return f"{to_string(stmt.lhs)} {stmt.op}= {to_string(stmt.rhs)};\n"
         case 'Loop':
             code = ''
-            if stmt.attr['ptype'] == 'naive' and 'plevel' in stmt.attr and 'nprocs' in stmt.attr:
+            if stmt.attr['ptype'] in ['naive', 'reduction'] and 'plevel' in stmt.attr and 'nprocs' in stmt.attr:
                 code += f"#pragma omp parallel for num_threads({stmt.attr['nprocs'][stmt.attr['plevel']][0]})\n"
             code += f"for ({get_dtype(stmt.end)} {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
             for e in stmt.body:

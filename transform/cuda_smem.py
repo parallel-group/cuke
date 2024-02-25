@@ -4,6 +4,7 @@ from asg import *
 from ir import *
 import codegen
 from asg2ir import gen_ir
+from codegen.gpu_instruction_set import *
 import copy
 
 def _same_object(a, b):
@@ -11,8 +12,11 @@ def _same_object(a, b):
         return get_obj(a).dobject_id == get_obj(b).dobject_id
     return False
 
-def _replace_all_ref(stmt, old, new):
+def _replace_all_ref(stmt, old, new, attr=''):
     def action(s, res):
+        if isinstance(s, Loop):
+            if attr in s.attr and s.attr[attr]:
+                return [False, False, False, False, False]
         match s.__class__.__name__:
             case 'Loop':
                 if _same_object(s.start, old):
@@ -41,20 +45,6 @@ def _replace_all_ref(stmt, old, new):
                 if _same_object(s.rhs, old):
                     s.rhs = new
             case 'Indexing':
-                # if same_object(s.dobject, old):
-                #     temp = s.dobject
-                #     idx_list =[s.idx]
-                #     while isinstance(temp, Indexing):
-                #         idx_list.append(temp.idx)
-                #         temp = temp.doibject
-                #     idx_list.reverse()
-                #     s.idx = new.idx
-                #     new_obj = new.dobject
-                #     for i in idx_list:
-                #         new_obj = Indexing(new_obj, i)
-                #     s.dobject = new_obj
-                # if same_object(s.idx, old):
-                #     s.idx = new
                 if _same_object(s.dobject, old):
                     s.dobject = new
                 if _same_object(s.idx, old):
@@ -80,10 +70,9 @@ def _replace_all_ref(stmt, old, new):
     t = IRTraversal(action)
     res = t(stmt)
 
-def apply_smem(node, eval, attr=''):
+def add_direct_cache(node, eval):
    
     scope = flatten(node.compute)
-
     def get_assigns(s, res):
         if type(s) in (Assignment, Code):
             res.append(s)
@@ -94,24 +83,71 @@ def apply_smem(node, eval, attr=''):
     lhs_list = []
     for s in assigns:
         if type(s) == Assignment:
-            if not _same_object(s.lhs, eval) and s.lhs not in lhs_list:
+            if not _same_object(s.lhs, node.eval) and s.lhs not in lhs_list:
                 lhs_list.append(s.lhs)
     
-    def replace_smem(node, lhs):
-        if not same_object(lhs, eval):
-            to_replace = Ndarray(arr_replace.dtype, arr_replace.size[1:])
-            to_replace.attr['smem'] = True
-            old_eval = lhs
+    def _get_split_loop_size(stmt, res):
+        if isinstance(stmt, Loop):
+            if stmt.start != 0:
+                if isinstance(stmt.start, Scalar):
+                    iter = stmt.start
+                    if 'loop' in iter.attr:
+                        loop = iter.attr['loop']
+                        _get_split_loop_size(loop, res)
+                        if 'nprocs' in loop.attr:
+                            for jj in loop.attr['nprocs']:
+                                if jj[1] == loop:
+                                    res.append(jj[0])
             
+
+    def replace_smem(node, lhs):
+        if not same_object(lhs, node.eval):
+            lhs_idx = []
+            size_list = []
+            temp = lhs
+            while isinstance(temp, Indexing):
+                lhs_idx.append(temp.idx)
+                temp = temp.dobject
+            flag = True
+            
+            for item in lhs_idx:
+                if 'loop' in item.attr:
+                    flag = False
+                    loop = item.attr['loop']
+
+                    # split loop happens
+                    res = []
+                    _get_split_loop_size(loop, res)
+                    size_list.extend(res)
+
+                    if 'nprocs' in loop.attr:
+                        for jj in loop.attr['nprocs']:
+                            if jj[1] == loop:
+                                size_list.append(jj[0])
+                    
+                elif 'ploop' in item.attr:
+                    ploop = item.attr['ploop']
+                    if 'nprocs' in ploop.attr:
+                        for jj in ploop.attr['nprocs']:
+                            if jj[1] == ploop:
+                                size_list.append(jj[0])
+                        
+            if flag:
+                size_list = size_list[::-1]
+            
+            to_replace = Ndarray(arr_replace.dtype, size_list[1:])
+            to_replace.attr['smem'] = True
+            # parallelize 'global', check mem_layer
+            # 'mem_layer' = 'smem'
+            # check if 'smem', then change to'register'
+            old_eval = lhs
+
             def replace_decls(n, res):
-                for nn in n.ref_by:
-                    replace_decls(nn, res)
                 decl = []
                 for d in n.decl:
                     v = d.dobject
                     replace_with = None
-
-                    if _same_object(lhs, v) or (n.eval != eval and _same_object(n.eval, v)):
+                    if _same_object(lhs, v):
                         replace_with = to_replace
                         if replace_with != None:
                             decl.append(Decl(replace_with))
@@ -125,10 +161,10 @@ def apply_smem(node, eval, attr=''):
             
             def replace_refs(n, res):
                 idx = []
+                redu_idx = []
                 def action(stmt, res):
                     if isinstance(stmt, Loop):
-                        if stmt.iterate not in res:
-                            res.append(stmt.iterate)
+                        if stmt not in res:
                             res.append(stmt)
                         return [True, True, True, True, True]
                     elif isinstance(stmt, list|tuple):
@@ -136,14 +172,22 @@ def apply_smem(node, eval, attr=''):
                             action(i, res)
                         return [True, True, True, True, True]
                     return res
-                for nn in n.ref_by:
-                    replace_refs(nn, res)
-                if len(n.compute) > 0:
+                
+                def _is_val_in_loopbody(loop, old):
+                    def action(s, res):
+                        if _same_object(s, old):
+                            res.append(True)
+                        return [True, True, True, True, True]
+                    return IRTraversal(action)(loop)
+
+                if not 'scope' in n.attr and len(n.compute) > 0:
                     new_var = to_replace
                     t = IRTraversal(action)
                     res = t(n.compute)
+                    
                     for item in res:
-                        if 'plevel' in item.attr:
+                        x = _is_val_in_loopbody(item, old_eval)
+                        if x and 'plevel' in item.attr:
                             if item.attr['plevel'] == 1 or item.attr['plevel'] == 2:
                                 iter = copy.deepcopy(item.iterate)
                                 iter.attr['offset'] = item.start
@@ -153,56 +197,212 @@ def apply_smem(node, eval, attr=''):
                             for i in range(len(idx)):
                                 if i<len(to_replace.size):
                                     new_var = Indexing(new_var, idx[i])
+                        _replace_all_ref(n.compute, old_eval, new_var, 'reduction')
+                    # print(codegen.gpu.to_string(old_eval), codegen.gpu.to_string(new_var))
+                    new_var = to_replace
+                    for item in res:
+                        x = _is_val_in_loopbody(item, old_eval)
+                        if x:
+                            if 'reduction' in item.attr:
+                                redu_idx.append(item.iterate)
+                            elif 'plevel' in item.attr:
+                                if item.attr['plevel'] == 1 or item.attr['plevel'] == 2:
+                                    iter = copy.deepcopy(item.iterate)
+                                    iter.attr['offset'] = item.start
+                                    redu_idx.append(iter)
+                    if new_var:
+                        if redu_idx:
+                            for i in range(len(redu_idx)):
+                                if i<len(to_replace.size):
+                                    new_var = Indexing(new_var, redu_idx[i])
                         _replace_all_ref(n.compute, old_eval, new_var)
 
                 return [True, True, True, True, True]
             ASGTraversal(replace_refs)(node)
-
+            
     for lhs in lhs_list:
         if lhs:
             arr_replace = get_obj(lhs)
-            
             if 'smem' in arr_replace.attr and arr_replace.attr['smem']:
                 continue
-        
-            if (attr != '' and 'mem_opt' in arr_replace.attr) or (attr == '' and 'mem_opt' not in arr_replace.attr):
-                if attr != '' and arr_replace.attr['mem_opt'] == attr:
-                    # replace mem to smem
-                    replace_smem(node, lhs)
-                elif attr == '':
-                    replace_smem(node,lhs)
-
             
+            for e in eval.attr['storage']:
+                if _same_object(lhs, e):
+                    replace_smem(node, lhs)
+                    break
 
+def _same_indirect_access(s1, s2):
+    if isinstance(s1, Indexing) and isinstance(s2, Indexing):
+        dobj1 = s1.dobject
+        temp = s2
+        while isinstance(temp, Indexing):
+            if same_object(dobj1, temp.dobject):
+                break
+            temp = temp.dobject
+        try:
+            while isinstance(s1, (Indexing, Ndarray)) and isinstance(temp, (Indexing, Ndarray)):
+                if same_object(s1.idx, temp.idx):
+                    return True
+                s1 = s1.idx
+                temp = temp.idx
+        except:
+            pass
+        return False
 
-
-def gather_smem(node, C, D):
+def add_indirect_cache(node, eval, C, D):
+    print('node eval:', codegen.gpu.to_string(eval))
+    uniq, buf, cnt = eval.attr['idx']
     scope = flatten(node.compute)
 
-    def get_assigns(s, res):
-        if type(s) in (Assignment, Code):
+    # def get_first_appear_loop(scope):
+
+    #     def _get_loops(s, res):
+    #         if isinstance(s, Loop):
+    #             res.append(s)
+    #         return [True, True, True, True, True]
+        
+    #     def _is_in_body(s, res):
+    #         if _same_indirect_access(s, eval):
+    #             res.append(True)
+    #         return [True, True, True, False, True]
+
+    #     for loop in scope:
+    #         i = IRTraversal(_get_loops)(loop)
+    #         for jj in i:
+    #             # print('===>', jj, codegen.gpu.to_string(jj))
+    #             # print('===>', codegen.gpu.to_string(jj), )
+    #             flag = IRTraversal(_is_in_body)(jj.body)
+    #             if True in flag:
+    #                 print(' ==>', jj, jj.attr)
+    #                 print(codegen.gpu.to_string(jj.attr['parent_loop']))
+    #     # parent loop, body insert 0
+    # # get_first_appear_loop(scope)
+
+
+    def get_indirect_access(s, res):
+        if isinstance(s, (Indexing)) and _same_indirect_access(eval, s):
             res.append(s)
+            return [False, False, False, False, False]
         return [True, True, True, True, True]
-    
-    assigns = IRTraversal(get_assigns)(scope)
+    inacc_list = IRTraversal(get_indirect_access)(scope)
+    # print(codegen.gpu.to_string(rhs_list))
+    for inacc in inacc_list:
+        indices = []
+        temp = inacc
+        while isinstance(temp, Indexing):
+            if isinstance(temp.idx, Indexing):
+                break
+            indices.append(temp.idx)
+            temp = temp.dobject
+        
+        cur_loop = indices[-1].attr['loop']
+        par_loop = indices[-1].attr['loop'].attr['parent_loop']
 
-    def is_reused(s):
-        def action(stmt, res):
-            # if isinstance(stmt, IR):
-            #     print('--->', stmt, codegen.gpu.to_string(stmt), stmt.attr)
-            if isinstance(stmt, IR) and 'reuse' in stmt.attr and stmt.attr['reuse']:
-                
-                res.append(stmt)
-            return [True, True, True, True, True]
-        x = IRTraversal(action)(s)
-        return x
+        # branch for matrix and vector
+        buf_idx = Indexing(buf, Literal(-1, 'int'))
+        buf_idx.idx = BlockIdx()
+        buf_idx = Indexing(buf_idx, Literal(-1, 'int'))
+        buf_idx.idx = ThreadIdy()
+        row_assign = None
 
-    x = is_reused(scope)
+        if len(eval.size) == 3:
+            smem = Ndarray(eval.dtype, [2, D, D])
+            smem.attr['smem'] = True
+            node.decl.append(Decl(smem))
+            
+            # data loading
+            outer_loop = Loop(0, 2, 1, [])
+            row_loop = Loop(ThreadIdy(), D, BlockDimy(), [])
+            col_loop = Loop(ThreadIdx(), D, BlockDimx(), [])
+            outer_loop.body.append(row_loop)
+            row_loop.body.append(col_loop)
+            global_var = Indexing(eval.dobject, Literal(-1, 'int'))
+            global_var.idx = Indexing(Indexing(uniq, Literal(-1, 'int')), outer_loop.iterate)
+            global_var.idx.dobject.idx = BlockIdx()
+            global_var = Indexing(global_var, Expr(row_loop.iterate, indices[1].attr['loop'].attr['parent_loop'].iterate, '+'))
+            global_var = Indexing(global_var, Expr(col_loop.iterate, indices[0].attr['loop'].attr['parent_loop'].iterate, '+'))
+
+            store_smem = Indexing(smem, outer_loop.iterate)
+            store_smem = Indexing(store_smem, row_loop.iterate)
+            store_smem = Indexing(store_smem, col_loop.iterate)
+            load = Assignment(store_smem, global_var)
+            col_loop.body.append(load)
+            # print(outer_loop, codegen.gpu.to_string(outer_loop))
+
+            # data access
+            idx = Scalar(eval.dtype)
+            # todo: should add if stmt
+            # idx_assign = Assignment(idx, Expr(Expr(buf_idx, C, '<'), Expr(buf_idx, Expr(buf_idx, C, '-'), ':'), '?'))
+            idx_assign = Assignment(idx, Expr(Expr(buf_idx, C, '<'), buf_idx, 'ternary', Expr(buf_idx, C, '-')))
+
+            row_off = Scalar(eval.dtype)
+            row_assign = Assignment(row_off, Expr(Expr(buf_idx, C, '<'), Expr(indices[1], indices[1].attr['loop'].attr['parent_loop'].iterate, '-'), 'ternary', indices[1]))
+            col_off = Scalar(eval.dtype)
+            col_assign = Assignment(col_off, Expr(Expr(buf_idx, C, '<'), Expr(indices[0], indices[0].attr['loop'].attr['parent_loop'].iterate, '-'), 'ternary', indices[0]))
+
+            load_smem = Indexing(smem, idx)
+            load_smem = Indexing(load_smem, row_off)
+            load_smem = Indexing(load_smem, col_off)
+            new_rhs = Indexing(eval.dobject, idx)
+            new_rhs = Indexing(new_rhs, row_off)
+            new_rhs = Indexing(new_rhs, col_off)
+
+            res = Scalar(eval.dtype)
+            res_assign = Assignment(res, Expr(Expr(buf_idx, C, '<'), load_smem, 'ternary', new_rhs))
+
+            cur_loop.body.insert(0, res_assign)
+            cur_loop.body.insert(0, col_assign)
+            cur_loop.body.insert(0, row_assign)
+            cur_loop.body.insert(0, idx_assign)
+            
+        elif len(eval.size) == 2:
+            smem = Ndarray(eval.dtype, [C, D])
+            smem.attr['smem'] = True
+            node.decl.append(Decl(smem))
+
+            # data loading
+            cnt_access = Indexing(cnt, Literal(-1, 'int'))
+            cnt_access.idx = BlockIdx()
+            outer_loop = Loop(Expr(ThreadIdx(), Expr(ThreadIdy(), BlockDimx(), '*'), '+'), Expr(cnt_access, D, '*'), Expr(BlockDimx(), BlockDimy(), '*'), [])
+            
+            global_var = Indexing(eval.dobject, Literal(-1, 'int'))
+            global_var.idx = Indexing(Indexing(uniq, Literal(-1, 'int')), Expr(outer_loop.iterate, D, '/'))
+            global_var.idx.dobject.idx = BlockIdx()
+            global_var = Indexing(global_var, Expr(Expr(outer_loop.iterate, D, '%'), indices[0].attr['loop'].attr['parent_loop'].iterate, '+'))
+
+            store_smem = Indexing(smem, Expr(outer_loop.iterate, D, '/'))
+            store_smem = Indexing(store_smem, Expr(outer_loop.iterate, D, '%'))
+            load = Assignment(store_smem, global_var)
+            outer_loop.body.append(load)
+            # print(outer_loop, codegen.gpu.to_string(outer_loop))
+
+            # data access
+            idx = Scalar(eval.dtype)
+            # todo: should add if stmt
+            idx_assign = Assignment(idx, Expr(Expr(buf_idx, C, '<'), buf_idx, 'ternary', Expr(buf_idx, C, '-')))
+
+            col_off = Scalar(eval.dtype)
+            col_assign = Assignment(col_off, Expr(Expr(buf_idx, C, '<'), Expr(indices[0], indices[0].attr['loop'].attr['parent_loop'].iterate, '-'), 'ternary', indices[0]))
+            load_smem = Indexing(smem, idx)
+            load_smem = Indexing(load_smem, col_off)
+            new_rhs = Indexing(eval.dobject, idx)
+            new_rhs = Indexing(new_rhs, col_off)
+
+            res = Scalar(eval.dtype)
+            res_assign = Assignment(res, Expr(Expr(buf_idx, C, '<'), load_smem, 'ternary', new_rhs))
+            
+            cur_loop.body.insert(0, res_assign)
+            cur_loop.body.insert(0, col_assign)
+            cur_loop.body.insert(0, idx_assign)
+            
+
+        outer_loop.attr['load'] = True
+        par_loop.body.insert(0, SyncThreads())
+        par_loop.body.insert(0, outer_loop)
+        outer_loop.attr['parent_loop'] = par_loop
     
-    if x != []:
-        print(x, codegen.gpu.to_string(x))
-        # print(assigns, codegen.gpu.to_string(assigns))
-        for i in assigns:
-            print(codegen.gpu.to_string(i), i.attr)
-            if 'parent_loop' in i.attr:
-                print(codegen.gpu.to_string(i.attr['parent_loop']))
+        # replace all refs
+        # _replace_all_ref(node.compute, inacc, res, 'load')
+        replace_all_ref(node.compute, inacc, res)
+        
+        
