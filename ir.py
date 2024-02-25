@@ -26,10 +26,11 @@ class DObject(IR):
 
 
 class Expr(IR):
-    def __init__(self, left, right, op: str):
+    def __init__(self, left, right, op: str, optional=None):
         super().__init__()
         self.left = left
         self.right = right
+        self.optional = optional
         self.op = op
         self.size = self.left.size
 

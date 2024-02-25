@@ -181,6 +181,10 @@ def get_input_nodes(node):
         if type(n) == asg.Var or type(n) == asg.Tensor:
             if n.attr['is_arg']:
                 res.append([n.eval.name(), n])
+            if 'reuse' in n.attr and n.attr['reuse']:
+                if 'idx' in n.attr:
+                    for jj in n.attr['idx']:
+                        res.append(jj)
 
     t = ASGTraversal(action)
     return dict(t(node))

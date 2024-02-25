@@ -213,8 +213,12 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                                    
                             if len(ext_size) > 0:
                                 num_ext = len(ext_size)
-                                to_replace[v] = (Ndarray(v.dtype, ext_size + v.size[num_ext-1:]), loop_info)
+                                arr = Ndarray(v.dtype, ext_size + v.size[num_ext-1:])
+                                to_replace[v] = (arr, loop_info)
         
+        # for key in to_replace:
+        #     print(codegen.gpu.to_string(key), codegen.gpu.to_string(to_replace[key][0]))
+
         def replace_decls(n, res):
             decl = []
             for d in n.decl:
@@ -226,9 +230,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         break
                 if replace_with != None:
                     decl.append(Decl(replace_with))
-                    if same_object(v, n.eval):
-                        if n != node:
-                            n.eval = replace_with
+                    n.eval.attr['storage'].append(replace_with)
                 else:
                     decl.append(d)
             n.decl = decl
@@ -248,8 +250,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         new_var = Indexing(new_var, idx)
                         if i<len(to_replace[s][1])-1:
                             old_var = Indexing(old_var, idx)
-                    # print(codegen.cpu.to_string(old_var))
-                    # print(codegen.cpu.to_string(new_var))
+                            
                     _replace_all_ref(n.compute, old_var, new_var)
 
         ASGTraversal(replace_refs)(node)
@@ -292,13 +293,9 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         temp = redu_eval
                         while isinstance(temp, Indexing):
                             ids.insert(0, temp.idx)
-                            #ids.append(temp.idx)
                             temp = temp.dobject
-                        #ids = ids[:-1] 
                         ids = ids[:num_ext-1]+ids[num_ext:]
 
-                        # A[tid0][Asize]
-                        # ids = ids[::-1]
                         for i in ids:
                             inter_res = Indexing(inter_res, i)
                         
@@ -319,8 +316,6 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         redu_loop.body.append(Assignment(inter_res, temp, '+'))
 
                         redu_loop.attr['reduction'] = True
-                        # used for check if this is partial result
-                        redu_arr.attr['partial_res'] = True
                         res.append([redu_eval, inter_res, s, redu_loop])
                         
                         pos = []
