@@ -1,9 +1,10 @@
 import transform
 from codegen import *
-from helpers import new_op, ASGTraversal
+from helpers import new_op, ASGTraversal, IRTraversal, flatten, get_obj
 from transform.fuse import basic_rule, fuse_operators
 from asg import *
 from asg2ir import gen_ir
+from ir import *
 
 @new_op
 def bvv(a, b):
@@ -97,32 +98,47 @@ class smem():
     def __call__(self, node):
         def action(n, res):
             if type(n) == TensorOp and 'op_name' in n.attr and n.attr['op_name'] in ['bsv', 'bvv', 'bvm']:
+                
                 transform.cuda_smem.add_direct_cache(node, n.eval)
                 # this function should 1) create a shared memory tensor for n.eval, 2) change all reference to the shared memory tensor for code in the scope of node, 3) handle both reduction ore non-reduction data
             
-            # if type(n) == TensorOp and n.op_type == 'index':
-            #     print(n.operators)
-            #     for i in n.operators:
-            #         print('====', i.name, i.attr)
-            #     print(n.operators[1].name)
             if type(n) == TensorOp and n.op_type == 'index' and 'reuse' in n.operators[1].attr and n.operators[1].attr['reuse'] == True:
                 unique_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), name=n.operators[1].name+'_uniq')
                 buf_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), name=n.operators[1].name+'_buf')
                 unique_cnt = Tensor((n.operators[1]._size()[0]/self.C, self.C), name=n.operators[1].name+'_unique_cnt')
                 n.operators[1].attr['idx'] = [[unique_idx.name, unique_idx], [buf_idx.name, buf_idx], [unique_cnt.name, unique_cnt]]
-
-                gen_ir(unique_idx)
-                gen_ir(buf_idx)
-                gen_ir(unique_cnt)
-
-                n.eval.attr['idx'] = [unique_idx.eval, buf_idx.eval, unique_cnt.eval]
                 
-                transform.cuda_smem.add_indirect_cache(node, n.eval, self.C, self.D)
+                # transform.cuda_smem.add_indirect_cache(node, n.eval, self.C, self.D)
+                # this function should 1) create a shared memory tensor for n.eval, 2) analyze n.eval.idx to get buf_idx/uniq_idx, 3) change all reference based on buf_idx/uniq_idx for code in the scope of node
                 # traverse n.eval.attr['cache'] array or scalar
                 # tensor should be generated in add_ func, gen_ir()
-                # transform.cuda_smem.add_indirect_cache(node, n.eval, self.C, self.D, unique_idx, buf_idx, unique_cnt)
+                transform.cuda_smem.add_indirect_cache(node, n.eval, self.C, self.D, unique_idx, buf_idx, unique_cnt)
+            
+            if type(n) == TensorOp and 'op_name' in n.attr and n.attr['op_name'] in ['bvv', 'bvm']:
+                def get_assigns(s, res):
+                    if type(s) in (Assignment, Code):
+                        res.append(s)
+                    return [True, True, True, True, True]
                 
-                # this function should 1) create a shared memory tensor for n.eval, 2) analyze n.eval.idx to get buf_idx/uniq_idx, 3) change all reference based on buf_idx/uniq_idx for code in the scope of node
+                def _find_reduction_loop(loop):
+                    def action(s, res):
+                        if isinstance(s, Loop):
+                            if 'ptype' in s.attr and s.attr['ptype'] == 'reduction':
+                                res.append(s)
+                        return [True, True, True, True, True]
+
+                    r = IRTraversal(action)(loop)
+                    return r
+                scope = flatten(node.compute)
+                for loop in scope:
+                    redu_loop = _find_reduction_loop(loop)
+                    for s in redu_loop:
+                        assign = IRTraversal(get_assigns)(s)
+                    # get lhs of last assignment
+                    lhs = assign[-1].lhs
+                    obj = get_obj(lhs)
+                    transform.cuda_smem.add_direct_cache(node, obj)
+                
 
         self.eval = node.eval
         t = ASGTraversal(action)(node)
@@ -134,10 +150,6 @@ class smem():
 # transform.passes = [fuser()]
 # transform.passes = [fuser(), tiler(16, 64)]
 transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
-# transform.passes = [tiler(16, 64), smem(16, 64)]
-# transform.passes = [fuser(), smem(16, 64)]
-# transform.passes = [smem(16, 64)]
-
 
 def transE():
     nnodes = Var(name='nnodes')
@@ -275,8 +287,8 @@ def backward():
 
 if __name__ == "__main__":
     # transE()
-    # transH()
-    transR()
+    transH()
+    # transR()
     # transF()
     # RESCAL()
     # backward()

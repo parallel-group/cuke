@@ -80,12 +80,67 @@ def add_direct_cache(node, eval):
     
     assigns = IRTraversal(get_assigns)(scope)
     
+
+    def replace_reg(node, lhs):
+        reg = Scalar(eval.dtype)
+        eval.attr['cache'] = reg
+        reg.attr['mem_layer'] = 'register'
+
+        def replace_decls(n, res):
+            decl = []
+            for d in n.decl:
+                v = d.dobject
+                replace_with = None
+                if _same_object(lhs, v):
+                    replace_with = reg
+                    if replace_with != None:
+                        decl.append(Decl(replace_with))
+                    else:
+                        decl.append(d)
+                else:
+                    decl.append(d)
+            n.decl = decl
+
+        ASGTraversal(replace_decls)(node)
+        
+        def replace_refs(n, res):
+            if not 'scope' in n.attr and len(n.compute) > 0:
+                _replace_all_ref(n.compute, lhs, reg)
+
+        ASGTraversal(replace_refs)(node)
+    
+    # def _find_reduction_loop(loop):
+    #                 def action(s, res):
+    #                     if isinstance(s, Loop):
+    #                         if 'ptype' in s.attr and s.attr['ptype'] == 'reduction':
+    #                             res.append(s)
+    #                     return [True, True, True, True, True]
+
+    #                 r = IRTraversal(action)(loop)
+    #                 return r
+    
+    # for loop in scope:
+    #     redu_loop = _find_reduction_loop(loop)
+    #     for s in redu_loop:
+    #         assign = IRTraversal(get_assigns)(s)
+    #     # get lhs of last assignment
+    #     lhs = assign[-1].lhs
+    #     obj = get_obj(lhs)
+    #     # if it is set as smem, then replace it to smem
+    #     if 'mem_layer' in obj.attr and obj.attr['mem_layer'] == 'smem':
+    #         replace_reg(node, lhs)
+        
+        
+        
+
+    
     lhs_list = []
     for s in assigns:
         if type(s) == Assignment:
-            if not _same_object(s.lhs, node.eval) and s.lhs not in lhs_list:
+            # if not _same_object(s.lhs, node.eval) and s.lhs not in lhs_list:
+            if s.lhs not in lhs_list:
                 lhs_list.append(s.lhs)
-    
+                
     def _get_split_loop_size(stmt, res):
         if isinstance(stmt, Loop):
             if stmt.start != 0:
@@ -98,7 +153,6 @@ def add_direct_cache(node, eval):
                             for jj in loop.attr['nprocs']:
                                 if jj[1] == loop:
                                     res.append(jj[0])
-            
 
     def replace_smem(node, lhs):
         if not same_object(lhs, node.eval):
@@ -109,7 +163,7 @@ def add_direct_cache(node, eval):
                 lhs_idx.append(temp.idx)
                 temp = temp.dobject
             flag = True
-            
+
             for item in lhs_idx:
                 if 'loop' in item.attr:
                     flag = False
@@ -136,9 +190,8 @@ def add_direct_cache(node, eval):
                 size_list = size_list[::-1]
             
             to_replace = Ndarray(arr_replace.dtype, size_list[1:])
-            to_replace.attr['smem'] = True
-            # parallelize 'global', check mem_layer
-            # 'mem_layer' = 'smem'
+            to_replace.attr['mem_layer'] = 'smem'
+            arr_replace.attr['cache'] = to_replace
             # check if 'smem', then change to'register'
             old_eval = lhs
 
@@ -198,7 +251,7 @@ def add_direct_cache(node, eval):
                                 if i<len(to_replace.size):
                                     new_var = Indexing(new_var, idx[i])
                         _replace_all_ref(n.compute, old_eval, new_var, 'reduction')
-                    # print(codegen.gpu.to_string(old_eval), codegen.gpu.to_string(new_var))
+                        
                     new_var = to_replace
                     for item in res:
                         x = _is_val_in_loopbody(item, old_eval)
@@ -219,17 +272,31 @@ def add_direct_cache(node, eval):
 
                 return [True, True, True, True, True]
             ASGTraversal(replace_refs)(node)
-            
+        
     for lhs in lhs_list:
         if lhs:
             arr_replace = get_obj(lhs)
-            if 'smem' in arr_replace.attr and arr_replace.attr['smem']:
-                continue
+            # if 'smem' in arr_replace.attr and arr_replace.attr['smem']:
+            #     continue
             
-            for e in eval.attr['storage']:
-                if _same_object(lhs, e):
+            # for e in eval.attr['storage']:
+            #     if _same_object(lhs, e):
+            #         replace_smem(node, lhs)
+            #         break
+
+
+            # if 'mem_layer' in arr_replace.attr and arr_replace.attr['mem_layer'] == 'smem':
+            #     continue
+
+            e = eval
+            while 'cache' in e.attr:
+                if _same_object(lhs, e.attr['cache']) and get_obj(lhs).attr['mem_layer'] == 'global':
                     replace_smem(node, lhs)
-                    break
+                e = e.attr['cache']
+                
+            if _same_object(lhs, eval) and get_obj(lhs).attr['mem_layer'] == 'smem':
+                replace_reg(node, lhs)
+    
 
 def _same_indirect_access(s1, s2):
     if isinstance(s1, Indexing) and isinstance(s2, Indexing):
@@ -249,35 +316,13 @@ def _same_indirect_access(s1, s2):
             pass
         return False
 
-def add_indirect_cache(node, eval, C, D):
-    print('node eval:', codegen.gpu.to_string(eval))
-    uniq, buf, cnt = eval.attr['idx']
+def add_indirect_cache(node, eval, C, D, *args):
+    eval_list = []
+    for tensor in args:
+        gen_ir(tensor)
+        eval_list.append(tensor.eval)
+    uniq, buf, cnt = eval_list
     scope = flatten(node.compute)
-
-    # def get_first_appear_loop(scope):
-
-    #     def _get_loops(s, res):
-    #         if isinstance(s, Loop):
-    #             res.append(s)
-    #         return [True, True, True, True, True]
-        
-    #     def _is_in_body(s, res):
-    #         if _same_indirect_access(s, eval):
-    #             res.append(True)
-    #         return [True, True, True, False, True]
-
-    #     for loop in scope:
-    #         i = IRTraversal(_get_loops)(loop)
-    #         for jj in i:
-    #             # print('===>', jj, codegen.gpu.to_string(jj))
-    #             # print('===>', codegen.gpu.to_string(jj), )
-    #             flag = IRTraversal(_is_in_body)(jj.body)
-    #             if True in flag:
-    #                 print(' ==>', jj, jj.attr)
-    #                 print(codegen.gpu.to_string(jj.attr['parent_loop']))
-    #     # parent loop, body insert 0
-    # # get_first_appear_loop(scope)
-
 
     def get_indirect_access(s, res):
         if isinstance(s, (Indexing)) and _same_indirect_access(eval, s):
@@ -285,7 +330,7 @@ def add_indirect_cache(node, eval, C, D):
             return [False, False, False, False, False]
         return [True, True, True, True, True]
     inacc_list = IRTraversal(get_indirect_access)(scope)
-    # print(codegen.gpu.to_string(rhs_list))
+    
     for inacc in inacc_list:
         indices = []
         temp = inacc
@@ -307,7 +352,7 @@ def add_indirect_cache(node, eval, C, D):
 
         if len(eval.size) == 3:
             smem = Ndarray(eval.dtype, [2, D, D])
-            smem.attr['smem'] = True
+            smem.attr['mem_layer'] = 'smem'
             node.decl.append(Decl(smem))
             
             # data loading
@@ -327,12 +372,9 @@ def add_indirect_cache(node, eval, C, D):
             store_smem = Indexing(store_smem, col_loop.iterate)
             load = Assignment(store_smem, global_var)
             col_loop.body.append(load)
-            # print(outer_loop, codegen.gpu.to_string(outer_loop))
 
             # data access
             idx = Scalar(eval.dtype)
-            # todo: should add if stmt
-            # idx_assign = Assignment(idx, Expr(Expr(buf_idx, C, '<'), Expr(buf_idx, Expr(buf_idx, C, '-'), ':'), '?'))
             idx_assign = Assignment(idx, Expr(Expr(buf_idx, C, '<'), buf_idx, 'ternary', Expr(buf_idx, C, '-')))
 
             row_off = Scalar(eval.dtype)
@@ -357,7 +399,7 @@ def add_indirect_cache(node, eval, C, D):
             
         elif len(eval.size) == 2:
             smem = Ndarray(eval.dtype, [C, D])
-            smem.attr['smem'] = True
+            smem.attr['mem_layer'] = 'smem'
             node.decl.append(Decl(smem))
 
             # data loading
@@ -374,11 +416,9 @@ def add_indirect_cache(node, eval, C, D):
             store_smem = Indexing(store_smem, Expr(outer_loop.iterate, D, '%'))
             load = Assignment(store_smem, global_var)
             outer_loop.body.append(load)
-            # print(outer_loop, codegen.gpu.to_string(outer_loop))
 
             # data access
             idx = Scalar(eval.dtype)
-            # todo: should add if stmt
             idx_assign = Assignment(idx, Expr(Expr(buf_idx, C, '<'), buf_idx, 'ternary', Expr(buf_idx, C, '-')))
 
             col_off = Scalar(eval.dtype)
@@ -402,7 +442,6 @@ def add_indirect_cache(node, eval, C, D):
         outer_loop.attr['parent_loop'] = par_loop
     
         # replace all refs
-        # _replace_all_ref(node.compute, inacc, res, 'load')
         replace_all_ref(node.compute, inacc, res)
         
         

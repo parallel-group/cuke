@@ -99,7 +99,7 @@ def to_string(stmt):
             elif type(stmt.dobject) == ir.Ndarray:
                 code = ''
                 if not stmt.dobject.attr['is_arg']:
-                    if 'smem' in stmt.dobject.attr and stmt.dobject.attr['smem']:
+                    if 'mem_layer' in stmt.dobject.attr and stmt.dobject.attr['mem_layer'] == 'smem':
                         shape = ''
                         for s in stmt.dobject.size:
                             shape += f'[{s}]'
@@ -107,17 +107,6 @@ def to_string(stmt):
                     else:
                         code = f'torch::Tensor obj_{stmt.dobject.name()} = torch::empty({{{",".join([to_string(s) for s in stmt.dobject.size])}}}, torch::TensorOptions(torch::k{"Int" if stmt.dobject.dtype=="int" else "Float"}).device(torch::kCUDA));\n'
                 return code
-            # todo: for smem setting
-            # elif type(stmt.dobject) == ir.Shared:
-            #     shape = ''
-            #     for i in range(len(stmt.dobject.dobject.size)):
-            #         shape += f'[{to_string(stmt.dobject.dobject.size[i])}]'
-            #     return f'__shared__ {stmt.dobject.dobject.dtype} {stmt.dobject.dobject.name()}{shape};\n'
-            # elif type(stmt.dobject) == Pointer:
-            #     return f'{ir.dobject.dtype} {ir.dobject.name()};\n'
-            
-            # elif type(stmt.dobject) == Buffer or Uniq:
-            #     return f'torch::Tensor {ir.dobject.dobject.__name__}_{ir.dobject.__class__.__name__} = torch::empty({{{to_string(ir.dobject.dobject.size[0])}/16, 16}}, torch::TensorOptions(torch::k{"Int" if ir.dobject.dobject.dtype=="int" else "Float"}).device(torch::kCUDA));\n'
             else:
                 return f'{to_string(stmt.dobject)}'
         case 'ThreadIdy' | 'ThreadIdx' | 'BlockDimy' | 'BlockDimx' | 'BlockIdy' | 'BlockIdx' | 'GridDimy' | 'GridDimx' | 'SyncThreads' | 'SyncWarps':
@@ -235,7 +224,7 @@ def print_cuda(node):
         cuda_spec(d, mapping)
         if d:
             if type(d) == ir.Decl and type(d.dobject) == ir.Ndarray:
-                if 'smem' in d.dobject.attr and d.dobject.attr['smem']:
+                if 'mem_layer' in d.dobject.attr and d.dobject.attr['mem_layer'] == 'smem':
                     cuda_declare += to_string(d)
                 else:
                     declare += to_string(d)
