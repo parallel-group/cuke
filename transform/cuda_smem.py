@@ -293,8 +293,8 @@ def add_direct_cache(node, eval):
                 if _same_object(lhs, e.attr['cache']) and get_obj(lhs).attr['mem_layer'] == 'global':
                     replace_smem(node, lhs)
                 e = e.attr['cache']
-                
-            if _same_object(lhs, eval) and get_obj(lhs).attr['mem_layer'] == 'smem':
+            
+            if _same_object(lhs, eval) and not _same_object(lhs, node.eval) and get_obj(lhs).attr['mem_layer'] == 'smem':
                 replace_reg(node, lhs)
     
 

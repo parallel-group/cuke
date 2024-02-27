@@ -134,10 +134,10 @@ class smem():
                     redu_loop = _find_reduction_loop(loop)
                     for s in redu_loop:
                         assign = IRTraversal(get_assigns)(s)
-                    # get lhs of last assignment
-                    lhs = assign[-1].lhs
-                    obj = get_obj(lhs)
-                    transform.cuda_smem.add_direct_cache(node, obj)
+                        # get lhs of last assignment
+                        lhs = assign[-1].lhs
+                        obj = get_obj(lhs)
+                        transform.cuda_smem.add_direct_cache(node, obj)
                 
 
         self.eval = node.eval
@@ -287,8 +287,8 @@ def backward():
 
 if __name__ == "__main__":
     # transE()
-    transH()
+    # transH()
     # transR()
     # transF()
-    # RESCAL()
+    RESCAL()
     # backward()
