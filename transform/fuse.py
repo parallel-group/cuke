@@ -134,7 +134,7 @@ def merge_loops(order1, order2, data, this_node, input_node):
         if len(dfs) > 0:
             if ir_uses(dfs[-1], data):
                 df = Scalar(data.dtype)
-                this_node.decl.append(Decl(df))
+                input_node.decl.append(Decl(df))
             else:
                 df = dfs[-1].rhs
                 flatten_remove(order2[-1][1].body, dfs[-1])
@@ -152,7 +152,21 @@ def merge_loops(order1, order2, data, this_node, input_node):
             clear_compute(input_node)
             remove_decl(input_node, input_node.eval)
             if type(df) in (Scalar, Ndarray):
+                pre_eval = input_node.eval
                 input_node.eval = df
+                # input_node.eval.attr['node'] = input_node
+                if 'cache' in input_node.eval.attr:
+                    cur = input_node.eval
+                    while 'cache' in cur.attr:
+                        cur = cur.attr['cache']
+                    cur.attr['cache'] = pre_eval
+                else:
+                    input_node.eval.attr['cache'] = pre_eval
+
+                # if 'storage' in input_node.eval.attr:
+                #     input_node.eval.attr['storage'].append(pre_eval)
+                # else:
+                #     input_node.eval.attr['storage'] = [pre_eval]
         else:
             if type(order1[-1][1]) == FilterLoop and data == get_obj(order1[-1][1].cond):
                 order1[-1][1].cond_body.extend(order2[-1][1].body)

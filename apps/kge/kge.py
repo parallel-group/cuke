@@ -1,9 +1,10 @@
 import transform
 from codegen import *
-from helpers import new_op, ASGTraversal
+from helpers import new_op, ASGTraversal, IRTraversal, flatten, get_obj
 from transform.fuse import basic_rule, fuse_operators
 from asg import *
 from asg2ir import gen_ir
+from ir import *
 
 @new_op
 def bvv(a, b):
@@ -68,15 +69,20 @@ class tiler():
     def __init__(self, C, D):
         self.C = C
         self.D = D
+        self.flag = []
 
     def __call__(self, node):
         def action(n, res):
+            if isinstance(n, TensorOp) and 'op_name' in n.attr:
+                self.flag.append(n.attr['op_name'])
             if not 'scope' in n.attr and len(n.compute) > 0:
                 transform.split.split_level(n, self.C, 0)
                 transform.parallelize.parallelize_loop(n, 80, [0])
                 transform.parallelize.parallelize_loop(n, 16, [0, 0])
                 transform.split.split_level(n, self.D, 2)
-                transform.parallelize.parallelize_level(n, 32, 3)
+                transform.parallelize.parallelize_level(n, 64, 3)
+                if 'bvm' in self.flag:
+                    transform.split.split_level(n, self.D, 4)
                 if 'op_name' in n.attr and n.attr['op_name'] == 'bov':
                     transform.split.split_axis(n, self.D, 2)
 
@@ -85,30 +91,65 @@ class tiler():
         return node
 
 class smem():
-    def __init__(self):
-        pass
+    def __init__(self, C, D):
+        self.C = C
+        self.D = D
 
     def __call__(self, node):
         def action(n, res):
-            if type(n) == TensorOp:
-                if 'op_name' in n.attr and n.attr['op_name'] in ('bvv', 'bsv', 'bmv'):
-                    transform.cuda_smem.add_direct_cache(n.eval, node) # this function should 1) create a shared memory tensor for n.eval, 2) change all reference to the shared memory tensor for code in the scope of node, 3) handle both reduction ore non-reduction data
-                if n.op_type == 'index' and 'reuse' in n.operators[1][0].attr and n.operators[1][0].attr['reuse'] == True:
-                    transform.cuda_smem.add_indirect_cache(n.eval, node) # this function should 1) create a shared memory tensor for n.eval, 2) analyze n.eval.idx to get buf_idx/uniq_idx, 3) change all reference based on buf_idx/uniq_idx for code in the scope of node
+            if type(n) == TensorOp and 'op_name' in n.attr and n.attr['op_name'] in ['bsv', 'bvv', 'bvm']:
+                
+                transform.cuda_smem.add_direct_cache(node, n.eval)
+                # this function should 1) create a shared memory tensor for n.eval, 2) change all reference to the shared memory tensor for code in the scope of node, 3) handle both reduction ore non-reduction data
+            
+            if type(n) == TensorOp and n.op_type == 'index' and 'reuse' in n.operators[1].attr and n.operators[1].attr['reuse'] == True:
+                unique_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), name=n.operators[1].name+'_uniq')
+                buf_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), name=n.operators[1].name+'_buf')
+                unique_cnt = Tensor((n.operators[1]._size()[0]/self.C, self.C), name=n.operators[1].name+'_unique_cnt')
+                n.operators[1].attr['idx'] = [[unique_idx.name, unique_idx], [buf_idx.name, buf_idx], [unique_cnt.name, unique_cnt]]
+                
+                # transform.cuda_smem.add_indirect_cache(node, n.eval, self.C, self.D)
+                # this function should 1) create a shared memory tensor for n.eval, 2) analyze n.eval.idx to get buf_idx/uniq_idx, 3) change all reference based on buf_idx/uniq_idx for code in the scope of node
+                # traverse n.eval.attr['cache'] array or scalar
+                # tensor should be generated in add_ func, gen_ir()
+                transform.cuda_smem.add_indirect_cache(node, n.eval, self.C, self.D, unique_idx, buf_idx, unique_cnt)
+            
+            if type(n) == TensorOp and 'op_name' in n.attr and n.attr['op_name'] in ['bvv', 'bvm']:
+                def get_assigns(s, res):
+                    if type(s) in (Assignment, Code):
+                        res.append(s)
+                    return [True, True, True, True, True]
+                
+                def _find_reduction_loop(loop):
+                    def action(s, res):
+                        if isinstance(s, Loop):
+                            if 'ptype' in s.attr and s.attr['ptype'] == 'reduction':
+                                res.append(s)
+                        return [True, True, True, True, True]
+
+                    r = IRTraversal(action)(loop)
+                    return r
+                scope = flatten(node.compute)
+                for loop in scope:
+                    redu_loop = _find_reduction_loop(loop)
+                    for s in redu_loop:
+                        assign = IRTraversal(get_assigns)(s)
+                        # get lhs of last assignment
+                        lhs = assign[-1].lhs
+                        obj = get_obj(lhs)
+                        transform.cuda_smem.add_direct_cache(node, obj)
+                
 
         self.eval = node.eval
-        t = ASGTraversal(action)
-        t(node)
-        
+        t = ASGTraversal(action)(node)
         return node
 
 # transform.passes = [f, tiler(16, 128), parallelizer([80, 8, 32])]
 # transform.passes = [f]
 # transform.passes = [fuser(), tiler(16, 128)]
-transform.passes = [fuser()]
+# transform.passes = [fuser()]
 # transform.passes = [fuser(), tiler(16, 64)]
-# transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
-
+transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
 
 def transE():
     nnodes = Var(name='nnodes')
@@ -196,9 +237,9 @@ def transF():
     vr = Remb[r]
 
     res = bvv(vh, vt) - bvv(vh - vt, vr)
-    code = codegen.cpu.print_cpp(gen_ir(res))
+    # code = codegen.cpu.print_cpp(gen_ir(res))
     # print(code)
-    # code = codegen.gpu.print_cuda(gen_ir(res))
+    code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
 
@@ -218,9 +259,9 @@ def RESCAL():
     mr = Proj[r]
 
     res = bvv(bvm(vh, mr), vt)
-    code = codegen.cpu.print_cpp(gen_ir(res))
+    # code = codegen.cpu.print_cpp(gen_ir(res))
     # print(code)
-    # code = codegen.gpu.print_cuda(gen_ir(res))
+    code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
 

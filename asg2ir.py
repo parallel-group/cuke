@@ -664,7 +664,7 @@ def gen_ir(node):
             node.eval = ir.Scalar(node.operators[0]._size()[0].dtype)
             node.decl = [ir.Decl(node.eval)]
             node.compute = [ir.Assignment(node.eval, node.operators[0].eval.size[axis])]
-
+        # node.eval.attr['storage'] = []
 
 
 
