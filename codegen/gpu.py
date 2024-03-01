@@ -56,10 +56,11 @@ def to_string(stmt):
                 code += f'for (int {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} > {to_string(stmt.end)}; {to_string(stmt.iterate)} >>= {to_string(stmt.step)}) {{\n' 
                 for e in stmt.body:
                     if isinstance(e, Assignment):
-                        code += f'{to_string(e.lhs)} += __shfl_down_sync(0xffffffff, {to_string(e.rhs)}, {to_string(stmt.iterate)});\n'
+                        code += f'{to_string(e.rhs)} += __shfl_down_sync(0xffffffff, {to_string(e.rhs)}, {to_string(stmt.iterate)});\n'
                     else:
                         code += f'to_string(e)'
                 code += '}\n__syncthreads();\n'
+                code += f'if(threadIdx.x == 0){{ {to_string(e.lhs)} = {to_string(e.rhs)}; }}\n'
             else:
                 code += f"for (int {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
                 for e in stmt.body:
@@ -172,15 +173,15 @@ def cuda_spec(stmt, mapping):
                     # replace_all_ref(s, s.iterate, new_iter)
                     s.start = new_iter
                     s.step = GridDimx()
-                    mapping['block'] = s.attr['nprocs'][s.attr['plevel']][0]
+                    # mapping['block'] = s.attr['nprocs'][s.attr['plevel']][0]
                 elif s.attr['plevel'] == 1:
                     s.start = ir.Expr(s.start, ThreadIdy(), '+')
                     s.step = BlockDimy()
-                    mapping['ty'] = s.attr['nprocs'][s.attr['plevel']][0]
+                    # mapping['ty'] = s.attr['nprocs'][s.attr['plevel']][0]
                 elif s.attr['plevel'] == 2:
                     s.start = ir.Expr(s.start, ThreadIdx(), '+')
                     s.step = BlockDimx()
-                    mapping['tx'] = s.attr['nprocs'][s.attr['plevel']][0]
+                    # mapping['tx'] = s.attr['nprocs'][s.attr['plevel']][0]
                 return [True, True, True, True, True]
             elif 'reduction' in s.attr and s.attr['reduction']:
                 s.start = Expr(BlockDimx(), 2, '/')

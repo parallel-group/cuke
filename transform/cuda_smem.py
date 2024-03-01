@@ -374,12 +374,12 @@ def add_indirect_cache(node, eval, C, D, *args):
             col_loop.body.append(load)
 
             # data access
-            idx = Scalar(eval.dtype)
+            idx = Scalar(dtype='int')
             idx_assign = Assignment(idx, Expr(Expr(buf_idx, C, '<'), buf_idx, 'ternary', Expr(buf_idx, C, '-')))
 
-            row_off = Scalar(eval.dtype)
+            row_off = Scalar(dtype='int')
             row_assign = Assignment(row_off, Expr(Expr(buf_idx, C, '<'), Expr(indices[1], indices[1].attr['loop'].attr['parent_loop'].iterate, '-'), 'ternary', indices[1]))
-            col_off = Scalar(eval.dtype)
+            col_off = Scalar(dtype='int')
             col_assign = Assignment(col_off, Expr(Expr(buf_idx, C, '<'), Expr(indices[0], indices[0].attr['loop'].attr['parent_loop'].iterate, '-'), 'ternary', indices[0]))
 
             load_smem = Indexing(smem, idx)
@@ -396,6 +396,11 @@ def add_indirect_cache(node, eval, C, D, *args):
             cur_loop.body.insert(0, col_assign)
             cur_loop.body.insert(0, row_assign)
             cur_loop.body.insert(0, idx_assign)
+
+            node.decl.append(Decl(idx))
+            node.decl.append(Decl(col_off))
+            node.decl.append(Decl(res))
+            node.decl.append(Decl(row_off))
             
         elif len(eval.size) == 2:
             smem = Ndarray(eval.dtype, [C, D])
@@ -418,10 +423,10 @@ def add_indirect_cache(node, eval, C, D, *args):
             outer_loop.body.append(load)
 
             # data access
-            idx = Scalar(eval.dtype)
+            idx = Scalar(dtype='int')
             idx_assign = Assignment(idx, Expr(Expr(buf_idx, C, '<'), buf_idx, 'ternary', Expr(buf_idx, C, '-')))
 
-            col_off = Scalar(eval.dtype)
+            col_off = Scalar(dtype='int')
             col_assign = Assignment(col_off, Expr(Expr(buf_idx, C, '<'), Expr(indices[0], indices[0].attr['loop'].attr['parent_loop'].iterate, '-'), 'ternary', indices[0]))
             load_smem = Indexing(smem, idx)
             load_smem = Indexing(load_smem, col_off)
@@ -435,6 +440,10 @@ def add_indirect_cache(node, eval, C, D, *args):
             cur_loop.body.insert(0, col_assign)
             cur_loop.body.insert(0, idx_assign)
             
+            node.decl.append(Decl(idx))
+            node.decl.append(Decl(col_off))
+            node.decl.append(Decl(res))
+
 
         outer_loop.attr['load'] = True
         par_loop.body.insert(0, SyncThreads())

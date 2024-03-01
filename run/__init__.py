@@ -1,1 +1,1 @@
-from run import cpu
+from run import cpu, gpu
