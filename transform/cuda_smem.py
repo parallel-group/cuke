@@ -192,6 +192,7 @@ def add_direct_cache(node, eval):
             to_replace = Ndarray(arr_replace.dtype, size_list[1:])
             to_replace.attr['mem_layer'] = 'smem'
             arr_replace.attr['cache'] = to_replace
+            eval.attr['storage'].append(to_replace)
             # check if 'smem', then change to'register'
             old_eval = lhs
 
@@ -276,25 +277,20 @@ def add_direct_cache(node, eval):
     for lhs in lhs_list:
         if lhs:
             arr_replace = get_obj(lhs)
-            # if 'smem' in arr_replace.attr and arr_replace.attr['smem']:
-            #     continue
             
-            # for e in eval.attr['storage']:
-            #     if _same_object(lhs, e):
+            if 'storage' in eval.attr:
+                for e in eval.attr['storage']:
+                    if _same_object(lhs, e) and arr_replace.attr['mem_layer'] == 'global':
+                        replace_smem(node, lhs)
+                        # break
+            # e = eval
+            # while 'cache' in e.attr:
+            #     # print(codegen.gpu.to_string(arr_replace), arr_replace.attr, codegen.gpu.to_string(e.attr['cache']))
+            #     if _same_object(lhs, e.attr['cache']) and arr_replace.attr['mem_layer'] == 'global':
             #         replace_smem(node, lhs)
-            #         break
-
-
-            # if 'mem_layer' in arr_replace.attr and arr_replace.attr['mem_layer'] == 'smem':
-            #     continue
-
-            e = eval
-            while 'cache' in e.attr:
-                if _same_object(lhs, e.attr['cache']) and get_obj(lhs).attr['mem_layer'] == 'global':
-                    replace_smem(node, lhs)
-                e = e.attr['cache']
+            #     e = e.attr['cache']
             
-            if _same_object(lhs, eval) and not _same_object(lhs, node.eval) and get_obj(lhs).attr['mem_layer'] == 'smem':
+            if _same_object(lhs, eval) and not _same_object(lhs, node.eval) and arr_replace.attr['mem_layer'] == 'smem':
                 replace_reg(node, lhs)
     
 

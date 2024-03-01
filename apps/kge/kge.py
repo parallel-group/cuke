@@ -207,21 +207,21 @@ def transE():
     # print(x, x.shape)
     # print(torch.sum(torch.abs(x) - torch.abs(y)))
 
-    indices = torch.argsort(rr)
-    hh = hh[indices]
-    tt = tt[indices]
-    rr = rr[indices]
+    # indices = torch.argsort(rr)
+    # hh = hh[indices]
+    # tt = tt[indices]
+    # rr = rr[indices]
 
-    uniq, buf, cnt = inspector(hh, tt, rr, relations)
-    # print(uniq, buf, cnt)
+    # uniq, buf, cnt = inspector(hh, tt, rr, relations)
+    # # print(uniq, buf, cnt)
 
-    # cnt = torch.zeros_like(cnt).cuda(0)
-    y = eemb[hh] - eemb[tt] + remb[rr]
-    print(y, y.shape)
-    # print(eemb.dtype, hh.dtype, remb.dtype, rr.dtype, uniq.dtype, buf.dtype, cnt.dtype, tt.dtype)
-    x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr, uniq, buf, cnt)
-    print(x, x.shape)
-    print(torch.sum(torch.abs(x) - torch.abs(y)))
+    # # cnt = torch.zeros_like(cnt).cuda(0)
+    # y = eemb[hh] - eemb[tt] + remb[rr]
+    # print(y, y.shape)
+    # # print(eemb.dtype, hh.dtype, remb.dtype, rr.dtype, uniq.dtype, buf.dtype, cnt.dtype, tt.dtype)
+    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr, uniq, buf, cnt)
+    # print(x, x.shape)
+    # print(torch.sum(torch.abs(x) - torch.abs(y)))
 
 def transH():
     nnodes = Var(name='nnodes')
