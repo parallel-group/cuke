@@ -163,10 +163,10 @@ def merge_loops(order1, order2, data, this_node, input_node):
                 else:
                     input_node.eval.attr['cache'] = pre_eval
 
-                # if 'storage' in input_node.eval.attr:
-                #     input_node.eval.attr['storage'].append(pre_eval)
-                # else:
-                #     input_node.eval.attr['storage'] = [pre_eval]
+                if 'storage' in input_node.eval.attr:
+                    input_node.eval.attr['storage'].append(pre_eval)
+                else:
+                    input_node.eval.attr['storage'] = [pre_eval]
         else:
             if type(order1[-1][1]) == FilterLoop and data == get_obj(order1[-1][1].cond):
                 order1[-1][1].cond_body.extend(order2[-1][1].body)

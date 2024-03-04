@@ -8,7 +8,7 @@ __global__ void FNAME_kernel(PTRS){
 RTYPE FNAME(ARGS)
 {   
     DECL
-    FNAME_kernel<<< block, dim3(ty,tx) >>>(PTR_VARS);
+    FNAME_kernel<<< block, dim3(tx,ty) >>>(PTR_VARS);
     RETURN
 }
 

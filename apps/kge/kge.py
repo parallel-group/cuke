@@ -1,10 +1,14 @@
 import transform
+import run
 from codegen import *
 from helpers import new_op, ASGTraversal, IRTraversal, flatten, get_obj
 from transform.fuse import basic_rule, fuse_operators
 from asg import *
 from asg2ir import gen_ir
 from ir import *
+
+import torch
+from torch.utils.cpp_extension import load
 
 @new_op
 def bvv(a, b):
@@ -103,9 +107,9 @@ class smem():
                 # this function should 1) create a shared memory tensor for n.eval, 2) change all reference to the shared memory tensor for code in the scope of node, 3) handle both reduction ore non-reduction data
             
             if type(n) == TensorOp and n.op_type == 'index' and 'reuse' in n.operators[1].attr and n.operators[1].attr['reuse'] == True:
-                unique_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), name=n.operators[1].name+'_uniq')
-                buf_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), name=n.operators[1].name+'_buf')
-                unique_cnt = Tensor((n.operators[1]._size()[0]/self.C, self.C), name=n.operators[1].name+'_unique_cnt')
+                unique_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), dtype='int', name=n.operators[1].name+'_uniq')
+                buf_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), dtype='int', name=n.operators[1].name+'_buf')
+                unique_cnt = Tensor((n.operators[1]._size()[0]/self.C, ), dtype='int', name=n.operators[1].name+'_unique_cnt')
                 n.operators[1].attr['idx'] = [[unique_idx.name, unique_idx], [buf_idx.name, buf_idx], [unique_cnt.name, unique_cnt]]
                 
                 # transform.cuda_smem.add_indirect_cache(node, n.eval, self.C, self.D)
@@ -151,6 +155,20 @@ class smem():
 # transform.passes = [fuser(), tiler(16, 64)]
 transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
 
+
+def inspector(h, t, r, rel_num):
+    C = 16
+    # print(h.shape)
+    uniq = torch.zeros((h.shape[0]//C, C), dtype=torch.int64).cuda(0)
+    buf = torch.zeros((h.shape[0]//C, C), dtype=torch.int64).cuda(0)
+    cnt = torch.zeros((h.shape[0]//C, ), dtype=torch.int64).cuda(0)
+
+    module = load(name='sort', sources=['apps/kge/inspection/inspector.cu'])
+    x = module.gpu_sort(h, t, r, uniq, buf, cnt, int(h.shape[0]), int(rel_num))
+    # print(x)
+    # print(uniq, buf, cnt, r)
+    return uniq, buf, cnt
+
 def transE():
     nnodes = Var(name='nnodes')
     nedges = Var(name='nedges')
@@ -161,6 +179,7 @@ def transE():
     h = Tensor((batch_size, ), dtype='int', name='h')
     t = Tensor((batch_size, ), dtype='int', name='t')
     r = Tensor((batch_size, ), dtype='int', name='r')
+    r.attr['reuse'] = True
     vh = Eemb[h]
     vt = Eemb[t]
     vr = Remb[r]
@@ -171,6 +190,38 @@ def transE():
     code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
+    batchsize=1024
+    dimension=512
+    relations = 30
+    entities = 999
+    hh = torch.randint(0, entities, (batchsize, )).cuda(0)
+    rr = torch.randint(0, relations, (batchsize, )).cuda(0)
+    tt = torch.randint(0, entities, (batchsize, )).cuda(0)
+    eemb = torch.rand((entities, dimension)).cuda(0)
+    remb = torch.rand((relations, dimension)).cuda(0)
+
+    # y = eemb[hh] - eemb[tt] + remb[rr]
+    # print(y, y.shape)
+
+    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr)
+    # print(x, x.shape)
+    # print(torch.sum(torch.abs(x) - torch.abs(y)))
+
+    # indices = torch.argsort(rr)
+    # hh = hh[indices]
+    # tt = tt[indices]
+    # rr = rr[indices]
+
+    # uniq, buf, cnt = inspector(hh, tt, rr, relations)
+    # # print(uniq, buf, cnt)
+
+    # # cnt = torch.zeros_like(cnt).cuda(0)
+    # y = eemb[hh] - eemb[tt] + remb[rr]
+    # print(y, y.shape)
+    # # print(eemb.dtype, hh.dtype, remb.dtype, rr.dtype, uniq.dtype, buf.dtype, cnt.dtype, tt.dtype)
+    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr, uniq, buf, cnt)
+    # print(x, x.shape)
+    # print(torch.sum(torch.abs(x) - torch.abs(y)))
 
 def transH():
     nnodes = Var(name='nnodes')
@@ -196,6 +247,42 @@ def transH():
     code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
+    batchsize=512
+    dimension=512
+    relations = 51
+    entities = 9999
+    hh = torch.randint(0, entities, (batchsize, )).cuda(0)
+    rr = torch.randint(0, relations, (batchsize, )).cuda(0)
+    tt = torch.randint(0, entities, (batchsize, )).cuda(0)
+    eemb = torch.rand((entities, dimension)).cuda(0)
+    remb = torch.rand((relations, dimension)).cuda(0)
+    pemb = torch.rand((relations, dimension)).cuda(0)
+
+    # for not reuse test
+    # y = eemb[hh] - eemb[tt] + remb[rr] - torch.einsum('a,ab->ab', torch.einsum('ab,ab->a', pemb[rr], eemb[hh]-eemb[tt]), pemb[rr])
+    # print(y, y.shape)
+
+    # print(torch.einsum('ab,ab->a', pemb[rr], eemb[hh]-eemb[tt])[:16])
+
+    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr, pemb)
+    # print(x, x.shape)
+
+    # reuse index building test
+    indices = torch.argsort(rr)
+    hh = hh[indices]
+    tt = tt[indices]
+    rr = rr[indices]
+
+    uniq, buf, cnt = inspector(hh, tt, rr, relations)
+    print(uniq, buf, cnt)
+
+    y = y = eemb[hh] - eemb[tt] + remb[rr] - torch.einsum('a,ab->ab', torch.einsum('ab,ab->a', pemb[rr], eemb[hh]-eemb[tt]), pemb[rr])
+    print(y, y.shape)
+
+    x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr, uniq, buf, cnt, pemb)
+    print(x, x.shape)
+    print(torch.sum(torch.abs(x) - torch.abs(y)), torch.sum(x - y))
+
 
 def transR():
     nnodes = Var(name='nnodes')
@@ -220,6 +307,38 @@ def transR():
     code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
+    batchsize=512
+    dimension=256
+    relations = 30
+    entities = 9999
+    hh = torch.randint(0, entities, (batchsize, )).cuda(0)
+    rr = torch.randint(0, relations, (batchsize, )).cuda(0)
+    tt = torch.randint(0, entities, (batchsize, )).cuda(0)
+    eemb = torch.rand((entities, dimension)).cuda(0)
+    remb = torch.rand((relations, dimension)).cuda(0)
+    pemb = torch.rand((relations, dimension, dimension)).cuda(0)
+
+    # y = torch.einsum('ab,abc->ac', eemb[hh] - eemb[tt], pemb[rr]) + remb[rr]
+    # print(y, y.shape)
+
+    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, pemb, rr, remb)
+    # print(x, x.shape)
+
+    indices = torch.argsort(rr)
+    hh = hh[indices]
+    tt = tt[indices]
+    rr = rr[indices]
+
+    uniq, buf, cnt = inspector(hh, tt, rr, relations)
+    print(uniq, buf, cnt)
+
+    y = torch.einsum('ab,abc->ac', eemb[hh] - eemb[tt], pemb[rr]) + remb[rr]
+    print(y, y.shape)
+    # print(eemb.dtype, hh.dtype, remb.dtype, rr.dtype, uniq.dtype, buf.dtype, cnt.dtype, tt.dtype)
+    x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, pemb, rr, uniq, buf, cnt, remb)
+    print(x, x.shape)
+    print(torch.sum(torch.abs(x) - torch.abs(y)))
+
 
 def transF():
     nnodes = Var(name='nnodes')
@@ -242,6 +361,36 @@ def transF():
     code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
+    batchsize=512
+    dimension=512
+    relations = 30
+    entities = 9999
+    hh = torch.randint(0, entities, (batchsize, )).cuda(0)
+    rr = torch.randint(0, relations, (batchsize, )).cuda(0)
+    tt = torch.randint(0, entities, (batchsize, )).cuda(0)
+    eemb = torch.rand((entities, dimension)).cuda(0)
+    remb = torch.rand((relations, dimension)).cuda(0)
+
+    # y = torch.einsum('ab,ab->a', eemb[hh], eemb[tt]) - torch.einsum('ab,ab->a',(eemb[hh] - eemb[tt]), remb[rr])
+    # print(y, y.shape)
+
+    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr)
+    # print(x, x.shape)
+
+    indices = torch.argsort(rr)
+    hh = hh[indices]
+    tt = tt[indices]
+    rr = rr[indices]
+
+    uniq, buf, cnt = inspector(hh, tt, rr, relations)
+    print(rr, uniq, buf, cnt)
+    y = torch.einsum('ab,ab->a', eemb[hh], eemb[tt]) - torch.einsum('ab,ab->a',(eemb[hh] - eemb[tt]), remb[rr])
+    print(y, y.shape)
+
+    x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr, uniq, buf, cnt)
+    print(x, x.shape)
+    print(torch.sum(torch.abs(x) - torch.abs(y)))
+
 
 def RESCAL():
     nnodes = Var(name='nnodes')
@@ -263,6 +412,37 @@ def RESCAL():
     # print(code)
     code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
+
+    batchsize=512
+    dimension=512
+    relations = 30
+    entities = 999
+    hh = torch.randint(0, entities, (batchsize, )).cuda(0)
+    rr = torch.randint(0, relations, (batchsize, )).cuda(0)
+    tt = torch.randint(0, entities, (batchsize, )).cuda(0)
+    eemb = torch.rand((entities, dimension)).cuda(0)
+    remb = torch.rand((relations, dimension, dimension)).cuda(0)
+
+    # y = torch.einsum('ab,ab->a', torch.einsum('ab,abc->ac', eemb[hh], remb[rr]), eemb[tt])
+    # print(y, y.shape)
+
+    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, 0, remb, rr, tt)
+    # print(x, x.shape)
+
+    indices = torch.argsort(rr)
+    hh = hh[indices]
+    tt = tt[indices]
+    rr = rr[indices]
+
+    uniq, buf, cnt = inspector(hh, tt, rr, relations)
+    # print(uniq, buf, cnt)
+
+    y = torch.einsum('ab,ab->a', torch.einsum('ab,abc->ac', eemb[hh], remb[rr]), eemb[tt])
+    print(y, y.shape)
+    # print(eemb.dtype, hh.dtype, remb.dtype, rr.dtype, uniq.dtype, buf.dtype, cnt.dtype, tt.dtype)
+    x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, 0, remb, rr, uniq, buf, cnt, tt)
+    print(x, x.shape)
+    print(torch.sum(torch.abs(x) - torch.abs(y)))
 
 
 

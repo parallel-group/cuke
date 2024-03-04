@@ -229,8 +229,9 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                     decl.append(Decl(replace_with))
                     replace_with.attr['mem_layer'] = 'global'
                     e = n.eval
-                    while 'cache' in e.attr :
-                        e = e.attr['cache']
+                    e.attr['storage'].append(replace_with)
+                    # while 'cache' in e.attr :
+                    #     e = e.attr['cache']
                     e.attr['cache'] = replace_with
                 else:
                     decl.append(d)
@@ -288,7 +289,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         if inter_res is None:
                             num_ext = len(to_replace[key][1])
                             inter_res = Ndarray(redu_eval.dtype, get_obj(redu_eval).size[:num_ext-1]+ get_obj(redu_eval).size[num_ext:])
-                        
+                        print(codegen.gpu.to_string(inter_res), codegen.gpu.to_string(redu_eval))
                         node.decl.append(Decl(inter_res))
                         ids = []
                         temp = redu_eval
