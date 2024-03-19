@@ -378,7 +378,11 @@ def replace_all_ref(stmt, old, new):
                 if same_object(s.step, old):
                     s.step = new
             case 'Math':
-                if same_object(s.val, old):
+                if isinstance(s.val, (list, tuple)):
+                    for i in range(len(s.val)):
+                        if same_object(s.val[i], old):
+                            s.val[i] = new
+                elif same_object(s.val, old):
                     s.val = new
             case 'Code':
                 for k in s.outputs:
@@ -439,7 +443,7 @@ def ir_defs(stmt, data):
 
 def remove_decl(node, item):
     def action(n, res):
-        n.decl = [d for d in n.decl if d.dobject != item]
+        n.decl = [d for d in n.decl if d.dobject.dobject_id != item.dobject_id]
     t = ASGTraversal(action)
     t(node)
 

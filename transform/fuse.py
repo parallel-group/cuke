@@ -2,7 +2,7 @@ from asg import *
 from ir import *
 import codegen
 from helpers import get_obj, get_val, rebind_iterate, flatten_remove, ir_uses, remove_decl, clear_compute, \
-    ir_find_defs, same_object, flatten, ASGTraversal, replace_all_ref
+    ir_find_defs, same_object, flatten, ASGTraversal, replace_all_ref, has_same_iteration_space, IRTraversal, ir_find_uses
 from asg2ir import gen_ir
 
 
@@ -75,6 +75,20 @@ def _replace_arrindex_with_scalar(ir, old, new):
             obj = get_obj(ir.val)
             if obj.dobject_id == old.dobject_id:
                 ir.val = new
+        elif type(ir.val) in (list, tuple):
+            new_val = []
+            for i in ir.val:
+                obj = get_obj(i)
+                # print(type(obj), new)
+                if type(obj) in (Indexing, Scalar, Ndarray, Literal, int):
+                    if obj.dobject_id == old.dobject_id:
+                        new_val.append(new)
+                    else:
+                        new_val.append(i)
+                else:
+                    new_val.append(i)
+            # print(codegen.gpu.to_string(ir.val), codegen.gpu.to_string(new_val))
+            ir.val = new_val
         else:
             _replace_arrindex_with_scalar(ir.val, old, new)
     elif type(ir) == Code:
@@ -184,7 +198,9 @@ def fuse_operators(op1, order1, op2):
     if len(order1) > 0:
         merge_loops(order1, op2.output_order, op2.eval, op1, op2)
     else:
+        print(op1.op_type)
         dfs = ir_find_defs(op2.compute, op2.eval)
+        print(dfs, codegen.gpu.to_string(dfs), codegen.gpu.to_string(op2.eval), ir_uses(dfs[-1], op2.eval))
         if len(dfs) > 0:
             if not ir_uses(dfs[-1], op2.eval):
                 df = dfs[-1].rhs
@@ -243,8 +259,42 @@ def basic_rule(node, res):
                         replace_all_ref(node.compute[0], node.operators[i].eval, df)
                         clear_compute(node.operators[i])
                         remove_decl(node.operators[i], node.operators[i].eval)
-
-
+    
+    elif type(node) == TensorOp and node.op_type == 'norm':
+        if type(node.operators[0]) == TensorOp and node.operators[0].op_type in (
+                elementwise_op + ['apply', 'setval']) and len(node.operators[0].ref_by) == 1:
+            fuse_operators(node, node.input_orders[0], node.operators[0])
+            dfs = ir_find_defs(node.compute, node.eval)
+            if len(dfs) > 0:
+                if not ir_uses(dfs[-1], node.eval):
+                    df = dfs[-1].rhs.val[0]
+                    new_s = Scalar(df.dtype)
+                    replace_all_ref(node.compute, df, new_s)
+                    remove_decl(node, get_obj(df))
+                    node.decl.append(Decl(new_s))
+                    if 'storage' in node.eval.attr:
+                        node.eval.attr['storage'].append(get_obj(df))
+                    else:
+                        node.eval.attr['storage'] = [get_obj(df)]
+        elif type(node.operators[0]) == Tensor:
+            fuse_operators(node, node.input_orders[0], node.operators[0])
+            dfs = ir_find_defs(node.compute, node.eval)
+            if len(dfs) > 0:
+                if not ir_uses(dfs[-1], node.eval):
+                    df = dfs[-1].rhs.val[0]
+                    new_s = Scalar(df.dtype)
+                    replace_all_ref(node.compute, df, new_s)
+                    remove_decl(node, get_obj(df))
+                    node.decl.append(Decl(new_s))
+                    if 'storage' in node.eval.attr:
+                        node.eval.attr['storage'].append(get_obj(df))
+                    else:
+                        node.eval.attr['storage'] = [get_obj(df)]
+    
+    elif type(node) == TensorOp and node.op_type == 'aggr':
+        if type(node.operators[0]) == TensorOp and node.operators[0].op_type in (
+                elementwise_op + ['apply', 'setval']) and len(node.operators[0].ref_by) == 1:
+            fuse_operators(node, node.output_order, node.operators[0])
 
 # def test1():
 #     A = Tensor((10, 20))

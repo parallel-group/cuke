@@ -119,8 +119,14 @@ def _replace_all_ref(stmt, old, new):
                 if _same_object(s.step, old):
                     s.step = new
             case 'Math':
-                if _same_object(s.val, old):
+                if isinstance(s.val, (list, tuple)):
+                    for i in range(len(s.val)):
+                        if _same_object(s.val[i], old):
+                            s.val[i] = new
+                elif _same_object(s.val, old):
                     s.val = new
+                # if _same_object(s.val, old):
+                #     s.val = new
             case 'Code':
                 for k in s.outputs:
                     if _same_object(s.outputs[k], old):
@@ -135,7 +141,7 @@ def _replace_all_ref(stmt, old, new):
 
 def parallelize_loop(node, num_procs, idx: list | tuple):
     assert isinstance(node, TensorOp)
-    assert node.op_type in elementwise_op + ['apply', 'einsum', 'setval']
+    assert node.op_type in elementwise_op + ['apply', 'einsum', 'setval', 'norm', 'aggr']
     assert type(num_procs) == int and num_procs > 0
 
     scope = flatten(node.compute)
@@ -182,7 +188,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                 res.append(s)
             return [True, True, True, True, True]
         assigns = IRTraversal(get_assigns)(loop)
-        
+
         def get_vars(n, res):
             res.extend([d.dobject for d in n.decl])
         all_vars = ASGTraversal(get_vars)(node)
@@ -190,6 +196,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
         to_replace = {}
         for s in assigns:
             for v in all_vars:
+                # if v not in to_replace and not same_object(v, node.eval):
                 if v not in to_replace:
                     if type(s) == Assignment:
                         lhs_list = [s.lhs]
@@ -252,11 +259,10 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         new_var = Indexing(new_var, idx)
                         if i<len(to_replace[s][1])-1:
                             old_var = Indexing(old_var, idx)
-                            
-                    _replace_all_ref(n.compute, old_var, new_var)
-
+                    # print(codegen.gpu.to_string([old_var, new_var]), codegen.gpu.to_string(node.compute))
+                    _replace_all_ref(node.compute, old_var, new_var)
+        # print(codegen.gpu.to_string(node.compute))
         ASGTraversal(replace_refs)(node)
-
         def reduction_procs(n, res):
             def _is_in_loopbody(loop, body, index):
                 for i, element in enumerate(body):
@@ -289,7 +295,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         if inter_res is None:
                             num_ext = len(to_replace[key][1])
                             inter_res = Ndarray(redu_eval.dtype, get_obj(redu_eval).size[:num_ext-1]+ get_obj(redu_eval).size[num_ext:])
-                        print(codegen.gpu.to_string(inter_res), codegen.gpu.to_string(redu_eval))
+                        
                         node.decl.append(Decl(inter_res))
                         ids = []
                         temp = redu_eval
@@ -317,6 +323,7 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         redu_loop.body.append(Assignment(inter_res, temp, '+'))
 
                         redu_loop.attr['reduction'] = True
+                        redu_loop.attr['parent_loop'] = outerloop
                         res.append([redu_eval, inter_res, s, redu_loop])
                         
                         pos = []

@@ -150,6 +150,8 @@ def gen_ir(node):
             res = node.eval
             compute = node.compute
 
+            lsize = helpers.get_ir_of_size(node.operators[0]._size())
+            rsize = helpers.get_ir_of_size(node.operators[1]._size())
             for level in range(max_levels):
 
                 # handle out of bound slicing
@@ -178,11 +180,10 @@ def gen_ir(node):
                 loop_ofs = max(left_ofs, right_ofs)
                 if loop_ofs > 0:
                     pre_loop.attr['loop_ofs'] = loop_ofs
-
-                if level < left_levels:
+                if size[level] in lsize:
                     lhs = bind(lhs, [pre_loop.iterate], [left_attr])
                     node.input_orders[0].append((level, pre_loop))
-                if level < right_levels:
+                if size[level] in rsize:
                     rhs = bind(rhs, [pre_loop.iterate], [right_attr])
                     node.input_orders[1].append((level, pre_loop))
                 res = bind(res, [pre_loop.iterate])
@@ -274,9 +275,22 @@ def gen_ir(node):
                     l = l.body[0]
             else:
                 node.operators[1].decl = [d for d in node.operators[1].decl if d.dobject != node.operators[1].eval]
+                a = helpers.ir_find_defs(node.operators[1].compute, node.operators[1].eval)
+                for i in a:
+                    if isinstance(i.lhs, ir.Indexing):
+                        temp = i.lhs
+                        idx_list = []
+                        while isinstance(temp, ir.Indexing):
+                            idx_list.append(temp.idx)
+                            temp = temp.dobject
+                        idx_list.reverse()
+                        res = bind(node.eval, idx_list)
+                        helpers.replace_all_ref(node.operators[1].compute, i.lhs, res)
+                    else:
+                        replace_output(node.operators[1].compute, node.operators[1].eval, node.eval)
                 node.operators[1].eval = node.eval
-                replace_output(node.operators[1].compute, node.operators[1].eval, node.eval)
-
+                node.output_order = node.operators[1].output_order
+                # print(node.operators[1].output_order)
 
         elif node.op_type == 'einsum':
             gen_ir(node.operators[0])
@@ -602,7 +616,7 @@ def gen_ir(node):
             node.eval = ir.Ndarray(node.dtype, size)
             gen_ir(node.operators[2])  # init
             node.operators[2].decl.append(ir.Decl(node.eval))
-
+            from codegen.gpu import to_string
             # compute
             outer_loop = ir.Loop(0, node.operators[0].eval.size[axis], 1, [], 'reduction')
 
@@ -624,17 +638,17 @@ def gen_ir(node):
                     res.extend(node.compute)
                     node.compute.clear()
 
-            t = asg.ASGTraversal(action)
-            ret_compute = t(ret)
+            ret_compute = helpers.ASGTraversal(action)(ret)
             
             for nn in ret_compute:
                 nn.attr['parent_loop'] = outer_loop
             outer_loop.body.extend(ret_compute)
+            outer_loop.attr['output_axis'] = 0
             node.compute.append(outer_loop)
 
-            replace_output(node.compute, ret.eval, item1.eval)
+            # replace_output(node.compute, ret.eval, item1.eval)
             node.decl = [d for d in node.decl if d.dobject != ret.eval]
-
+            
             node.output_order = [(0, outer_loop)]
             for i in range(len(ret.output_order)):
                 node.output_order.append((i + 1, ret.output_order[i][1]))
@@ -664,6 +678,69 @@ def gen_ir(node):
             node.eval = ir.Scalar(node.operators[0]._size()[0].dtype)
             node.decl = [ir.Decl(node.eval)]
             node.compute = [ir.Assignment(node.eval, node.operators[0].eval.size[axis])]
+        
+        elif node.op_type == 'norm':
+            gen_ir(node.operators[0])
+            gen_ir(node.operators[1])
+            gen_ir(node.operators[2])
+            node.input_orders[0] = []
+            
+            if len(node._size()) > 0:  # if output has >=1 dimensions, it should be stored in an Ndarray
+                size = helpers.get_ir_of_size(node._size())
+                node.eval = ir.Ndarray(node.dtype, size)
+                inter_res = ir.Ndarray(node.dtype, size)
+            else:  # otherwise, it is a scalar
+                size = []
+                node.eval = ir.Scalar(node.dtype)
+            node.decl = [ir.Decl(node.eval), ir.Decl(inter_res)]
+            
+            # accumulate results with powf(p)
+            size = helpers.get_ir_of_size(node.operators[0].ref_size)
+            pre_loop = ir.Loop(0, size[0], 1, [])
+            node.input_orders[0].append((len(node.input_orders[0]), pre_loop))
+            node.compute = [pre_loop]
+            res = bind(node.eval, [pre_loop.iterate])
+            inter_res = bind(inter_res, [pre_loop.iterate])
+            val = bind(node.operators[0].eval, [pre_loop.iterate])
+            for i in range(1, len(size)):
+                loop = ir.Loop(0, size[i], 1, [])
+                pre_loop.body.append(loop)
+                loop.attr['parent_loop'] = pre_loop
+                pre_loop = loop
+                node.input_orders[0].append((len(node.input_orders[0]), pre_loop))
+                if size[i] != node.operators[2].eval:
+                    res = bind(res, [pre_loop.iterate])
+                    inter_res = bind(inter_res, [pre_loop.iterate])
+                else:
+                    pre_loop.attr['ptype'] = 'reduction'
+                val = bind(val, [pre_loop.iterate])
+            init = ir.Assignment(inter_res, 0)
+            node.compute[0].body.insert(0, init)
+            if node.operators[1].eval.val % 2 == 0:
+                assign = ir.Assignment(inter_res, ir.Math([val, node.operators[1].eval], 'powf'), '+')
+            else:
+                assign = ir.Assignment(inter_res, ir.Math([ir.Math(val, 'fabs'), node.operators[1].eval], 'powf'), '+')
+            pre_loop.body.append(assign)
+            assign = ir.Assignment(res, ir.Math([inter_res, ir.Expr(ir.Literal(1.0, 'float'), node.operators[1].eval, '/')], 'powf'))
+            node.compute[0].body.append(assign)
+
+            # apply powf(1/p)
+            # size = helpers.get_ir_of_size(node.ref_size)
+            # pre_loop = ir.Loop(0, size[0], 1, [])
+            # node.compute.append(pre_loop)
+            # res = bind(node.eval, [pre_loop.iterate])
+            # inter_res = bind(inter_res, [pre_loop.iterate])
+            # for i in range(1, len(size)):
+            #     loop = ir.Loop(0, size[i], 1, [])
+            #     pre_loop.body.append(loop)
+            #     loop.attr['parent_loop'] = pre_loop
+            #     pre_loop = loop
+            #     if size[i] != node.operators[2].eval:
+            #         res = bind(res, [pre_loop.iterate])
+            #         inter_res = bind(inter_res, [pre_loop.iterate])
+            # assign = ir.Assignment(res, ir.Math([inter_res, ir.Expr(ir.Literal(1.0, 'float'), node.operators[1].eval, '/')], 'powf'))
+            # pre_loop.body.append(assign)
+
         node.eval.attr['storage'] = []
 
 

@@ -136,7 +136,7 @@ __global__ void build_index(torch::PackedTensorAccessor32<int64_t, 1, torch::Res
 }
 
 
-void gpu_sort(torch::Tensor head, torch::Tensor tail, torch::Tensor relation, torch::Tensor r_Uniq, torch::Tensor r_Buffer, torch::Tensor uniq_cnt, int batch, int rel_num) {
+void gpu_sort(torch::Tensor relation, torch::Tensor r_Uniq, torch::Tensor r_Buffer, torch::Tensor uniq_cnt, int batch, int rel_num) {
 
     build_index<<< batch/C, C>>>(relation.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(), r_Uniq.packed_accessor32<int64_t, 2, torch::RestrictPtrTraits>(), r_Buffer.packed_accessor32<int64_t, 2, torch::RestrictPtrTraits>(), uniq_cnt.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(), rel_num);
 

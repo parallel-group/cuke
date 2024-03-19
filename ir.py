@@ -140,6 +140,11 @@ class Indexing(DObject):
         super().__init__(dobject.dtype, size)
 
     def refresh_size(self):
+        if isinstance(self, Indexing):
+            if isinstance(self.dobject, Indexing):
+                self.dobject.refresh_size()
+            if isinstance(self.idx, Indexing):
+                self.idx.refresh_size()
         if type(self.dobject) in (Ndarray, Slice):
             if type(self.idx) == Literal and self.idx.val == -1:
                 # idx is unspecified, which means the Indexing is a range of indice stored in dobject, so the size of Indexing should the same as the dobject
