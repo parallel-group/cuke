@@ -468,11 +468,11 @@ def test14():
 
 
 def test15():
-    A = Tensor('A', (100, ))
-    B = Tensor('B', (100, ))
+    A = Tensor((100, ))
+    B = Tensor((100, ))
 
     ast = A[1:10] + A[0:9] + B[-1:8]
-    print(helpers.get_input_nodes(ast))
+    # print(helpers.get_input_nodes(ast))
     ir = gen_ir(ast)
 
     code = codegen.cpu.print_cpp(ir)
@@ -1202,7 +1202,7 @@ if __name__ == "__main__":
     # test13_1()
     # test14()
     # some slicing examples
-    # test15()
+    test15()
     # test16()
     # test17()
     # test18()
@@ -1217,8 +1217,8 @@ if __name__ == "__main__":
     # apply_test2()
     # apply_test3()
     # apply_test4()
-    apply_test5()
-    apply_test6()
+    # apply_test5()
+    # apply_test6()
     # apply_test7()
     # apply_test8()
     # apply_test9()

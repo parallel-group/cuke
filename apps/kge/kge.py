@@ -468,7 +468,7 @@ def backward():
 if __name__ == "__main__":
     # transE()
     # transH()
-    # transR()
+    transR()
     # transF()
-    RESCAL()
+    # RESCAL()
     # backward()
