@@ -1,3 +1,4 @@
+from __future__ import annotations
 import ir
 import asg
 import asg2ir
@@ -53,19 +54,18 @@ def eval_const_expr(expr):
             if lhs != None:
                 rhs = eval_const_expr(e.operators[1])
                 if rhs != None:
-                    match e.op_type:
-                        case 'add':
-                            return lhs + rhs
-                        case 'sub':
-                            return lhs - rhs
-                        case 'mul':
-                            return lhs * rhs
-                        case 'floordiv':
-                            return lhs // rhs
-                        case 'truediv':
-                            return lhs / rhs
-                        case _:
-                            return None
+                    if e.op_type == 'add':
+                        return lhs + rhs
+                    elif e.op_type == 'sub':
+                        return lhs - rhs
+                    elif e.op_type == 'mul':
+                        return lhs * rhs
+                    elif e.op_type == 'floordiv':
+                        return lhs // rhs
+                    elif e.op_type == 'truediv':
+                        return lhs / rhs
+                    else:
+                        return None
                 else:
                     return None
             else:
@@ -338,15 +338,14 @@ def rebind_iterate(stmt, old, new):
 
 def replace_all_ref(stmt, old, new):
     def action(s, res):
-        match s.__class__.__name__:
-            case 'Loop':
+        if isinstance(s, ir.Loop):
                 if same_object(s.start, old):
                     s.start = new
                 if same_object(s.end, old):
                     s.end = new
                 if same_object(s.step, old):
                     s.step = new
-            case 'FilterLoop':
+        elif isinstance(s, ir.FilterLoop):
                 if same_object(s.cond, old):
                     s.cond = new
                 if same_object(s.start, old):
@@ -355,36 +354,36 @@ def replace_all_ref(stmt, old, new):
                     s.end = new
                 if same_object(s.step, old):
                     s.step = new
-            case 'Expr':
+        elif isinstance(s, ir.Expr):
                 if same_object(s.left, old):
                     s.left = new
                 if same_object(s.right, old):
                     s.right = new
-            case 'Assignment':
+        elif isinstance(s, ir.Assignment):
                 if same_object(s.lhs, old):
                     s.lhs = new
                 if same_object(s.rhs, old):
                     s.rhs = new
-            case 'Indexing':
+        elif isinstance(s, ir.Indexing):
                 if same_object(s.dobject, old):
                     s.dobject = new
                 if same_object(s.idx, old):
                     s.idx = new
-            case 'Slice':
+        elif isinstance(s, ir.Slice):
                 if same_object(s.start, old):
                     s.start = new
                 if same_object(s.stop, old):
                     s.stop = new
                 if same_object(s.step, old):
                     s.step = new
-            case 'Math':
+        elif isinstance(s, ir.Math):
                 if isinstance(s.val, (list, tuple)):
                     for i in range(len(s.val)):
                         if same_object(s.val[i], old):
                             s.val[i] = new
                 elif same_object(s.val, old):
                     s.val = new
-            case 'Code':
+        elif isinstance(s, ir.Code):
                 for k in s.outputs:
                     if same_object(s.outputs[k], old):
                         s.outputs[k] = new
@@ -443,7 +442,7 @@ def ir_defs(stmt, data):
 
 def remove_decl(node, item):
     def action(n, res):
-        n.decl = [d for d in n.decl if d.dobject.dobject_id != item.dobject_id]
+        n.decl = [d for d in n.decl if d.dobject != item]
     t = ASGTraversal(action)
     t(node)
 

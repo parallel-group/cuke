@@ -111,5 +111,9 @@ def general_interchange(node, swap_order):
         for inner in loop_dict[swap_order[1]]:
             if _if_in_loop(outer, inner):
                 temp = inner.body
-                inner.body = outer.body
+                ploop = inner.attr['parent_loop']
+                inner.body = [outer]
+                inner.attr['parent_loop'] = outer.attr['parent_loop']
                 outer.body = temp
+                outer.attr['parent_loop'] = ploop
+                inner.attr['parent_loop'].body = [inner]

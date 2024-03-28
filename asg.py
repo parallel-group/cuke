@@ -1,3 +1,4 @@
+from __future__ import annotations
 import inspect
 import helpers
 
@@ -48,9 +49,6 @@ def inline(src, output=[], inputs=[]):
 
 def einsum(exp: str, tensor1, tensor2):
     return TensorOp('einsum', tensor1, tensor2, exp)
-
-def norm(tensor, p, dim=-1):
-        return TensorOp('norm', tensor, p, dim)
 
 class ASTNode:
     nuniq = 0
@@ -475,25 +473,6 @@ class TensorOp(Tensor):
             axis = self.operators[1].val
             assert axis < len(self.operators[0]._size())
 
-        elif op_type == 'norm':
-            dtype = self.operators[0].dtype
-            
-            if (helpers.is_scalar(self.operators[1])):
-                if type(self.operators[1]) == int:
-                    self.operators[1] = Const(self.operators[1], int)
-            if isinstance(self.operators[2], Tensor):
-                assert self.operators[2] in self.operators[0]._size()
-                idx = self.operators[0]._size().index(self.operators[2])
-                ref_size = self.operators[0]._size()[:idx] + self.operators[0]._size()[idx+1:]
-            elif type(self.operators[2]) == int:
-                assert self.operators[2] < len(self.operators[0]._size())
-                if self.operators[2] < 0:
-                    idx = len(self.operators[0]._size()) + self.operators[2]
-                    ref_size = self.operators[0]._size()[:idx] + self.operators[0]._size()[idx+1:]
-                    self.operators[2] = self.operators[0]._size()[idx]
-                else:
-                    ref_size = self.operators[0]._size()[:self.operators[2]] + self.operators[0]._size()[self.operators[2]+1:]
-                    self.operators[2] = self.operators[0]._size()[self.operators[2]]
 
         super().__init__(ref_size, dtype, name = f'{op_type}_' + '_'.join([op.name if (hasattr(op, 'name') and op.name != None) else '' for op in self.operators]))
 

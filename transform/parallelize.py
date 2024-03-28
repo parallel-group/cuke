@@ -1,3 +1,4 @@
+from __future__ import annotations
 import transform
 from helpers import ASGTraversal, IRTraversal, get_obj, replace_all_ref, same_object, flatten, get_loops_at_level
 from asg import *
@@ -65,15 +66,14 @@ def _same_object(a, b):
 
 def _replace_all_ref(stmt, old, new):
     def action(s, res):
-        match s.__class__.__name__:
-            case 'Loop':
+        if isinstance(s, Loop):
                 if _same_object(s.start, old):
                     s.start = new
                 if _same_object(s.end, old):
                     s.end = new
                 if _same_object(s.step, old):
                     s.step = new
-            case 'FilterLoop':
+        elif isinstance(s, FilterLoop):
                 if _same_object(s.cond, old):
                     s.cond = new
                 if _same_object(s.start, old):
@@ -82,43 +82,29 @@ def _replace_all_ref(stmt, old, new):
                     s.end = new
                 if _same_object(s.step, old):
                     s.step = new
-            case 'Expr':
+        elif isinstance(s, Expr):
                 if _same_object(s.left, old):
                     s.left = new
                 if _same_object(s.right, old):
                     s.right = new
-            case 'Assignment':
+        elif isinstance(s, Assignment):
                 if _same_object(s.lhs, old):
                     s.lhs = new
                 if _same_object(s.rhs, old):
                     s.rhs = new
-            case 'Indexing':
-                # if same_object(s.dobject, old):
-                #     temp = s.dobject
-                #     idx_list =[s.idx]
-                #     while isinstance(temp, Indexing):
-                #         idx_list.append(temp.idx)
-                #         temp = temp.doibject
-                #     idx_list.reverse()
-                #     s.idx = new.idx
-                #     new_obj = new.dobject
-                #     for i in idx_list:
-                #         new_obj = Indexing(new_obj, i)
-                #     s.dobject = new_obj
-                # if same_object(s.idx, old):
-                #     s.idx = new
+        elif isinstance(s, Indexing):
                 if _same_object(s.dobject, old):
                     s.dobject = new
                 if _same_object(s.idx, old):
                     s.idx = new
-            case 'Slice':
+        elif isinstance(s, Slice):
                 if _same_object(s.start, old):
                     s.start = new
                 if _same_object(s.stop, old):
                     s.stop = new
                 if _same_object(s.step, old):
                     s.step = new
-            case 'Math':
+        elif isinstance(s, Math):
                 if isinstance(s.val, (list, tuple)):
                     for i in range(len(s.val)):
                         if _same_object(s.val[i], old):
@@ -127,7 +113,7 @@ def _replace_all_ref(stmt, old, new):
                     s.val = new
                 # if _same_object(s.val, old):
                 #     s.val = new
-            case 'Code':
+        elif isinstance(s, Code):
                 for k in s.outputs:
                     if _same_object(s.outputs[k], old):
                         s.outputs[k] = new
@@ -259,14 +245,12 @@ def parallelize_loop(node, num_procs, idx: list | tuple):
                         new_var = Indexing(new_var, idx)
                         if i<len(to_replace[s][1])-1:
                             old_var = Indexing(old_var, idx)
-                    # print(codegen.gpu.to_string([old_var, new_var]), codegen.gpu.to_string(node.compute))
                     _replace_all_ref(node.compute, old_var, new_var)
-        # print(codegen.gpu.to_string(node.compute))
         ASGTraversal(replace_refs)(node)
         def reduction_procs(n, res):
             def _is_in_loopbody(loop, body, index):
                 for i, element in enumerate(body):
-                    if isinstance(element, list|tuple):
+                    if isinstance(element, (list, tuple)):
                         index.append(i)
                         if _is_in_loopbody(loop, element, index):
                             return True

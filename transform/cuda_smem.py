@@ -17,15 +17,14 @@ def _replace_all_ref(stmt, old, new, attr=''):
         if isinstance(s, Loop):
             if attr in s.attr and s.attr[attr]:
                 return [False, False, False, False, False]
-        match s.__class__.__name__:
-            case 'Loop':
+        if isinstance(s, Loop):
                 if _same_object(s.start, old):
                     s.start = new
                 if _same_object(s.end, old):
                     s.end = new
                 if _same_object(s.step, old):
                     s.step = new
-            case 'FilterLoop':
+        elif isinstance(s, FilterLoop):
                 if _same_object(s.cond, old):
                     s.cond = new
                 if _same_object(s.start, old):
@@ -34,29 +33,29 @@ def _replace_all_ref(stmt, old, new, attr=''):
                     s.end = new
                 if _same_object(s.step, old):
                     s.step = new
-            case 'Expr':
+        elif isinstance(s, Expr):
                 if _same_object(s.left, old):
                     s.left = new
                 if _same_object(s.right, old):
                     s.right = new
-            case 'Assignment':
+        elif isinstance(s, Assignment):
                 if _same_object(s.lhs, old):
                     s.lhs = new
                 if _same_object(s.rhs, old):
                     s.rhs = new
-            case 'Indexing':
+        elif isinstance(s, Indexing):
                 if _same_object(s.dobject, old):
                     s.dobject = new
                 if _same_object(s.idx, old):
                     s.idx = new
-            case 'Slice':
+        elif isinstance(s, Slice):
                 if _same_object(s.start, old):
                     s.start = new
                 if _same_object(s.stop, old):
                     s.stop = new
                 if _same_object(s.step, old):
                     s.step = new
-            case 'Math':
+        elif isinstance(s, Math):
                 if isinstance(s.val, (list, tuple)):
                     for i in range(len(s.val)):
                         if _same_object(s.val[i], old):
@@ -65,11 +64,12 @@ def _replace_all_ref(stmt, old, new, attr=''):
                     s.val = new
                 # if _same_object(s.val, old):
                 #     s.val = new
-            case 'Code':
-                if _same_object(s.output[1], old):
-                    s.output = (s.output[0], new)
+        elif isinstance(s, Code):
+                for k in s.outputs:
+                    if _same_object(s.outputs[k], old):
+                        s.outputs[k] = new
                 for k in s.inputs:
-                    if s.inputs[k] == old:
+                    if _same_object(s.inputs[k], old):
                         s.inputs[k] = new
         return [True, True, True, True, True]
 
@@ -88,7 +88,6 @@ def add_direct_cache(node, eval):
     lhs_list = []
     for s in assigns:
         if type(s) == Assignment:
-            # if not _same_object(s.lhs, node.eval) and s.lhs not in lhs_list:
             if s.lhs not in lhs_list:
                 lhs_list.append(s.lhs)
     
@@ -216,7 +215,7 @@ def add_direct_cache(node, eval):
                         if stmt not in res:
                             res.append(stmt)
                         return [True, True, True, True, True]
-                    elif isinstance(stmt, list|tuple):
+                    elif isinstance(stmt, (list,tuple)):
                         for i in stmt:
                             action(i, res)
                         return [True, True, True, True, True]
@@ -280,19 +279,13 @@ def add_direct_cache(node, eval):
                         # break
             # e = eval
             # while 'cache' in e.attr:
-            #     # print(codegen.gpu.to_string(arr_replace), arr_replace.attr, codegen.gpu.to_string(e.attr['cache']))
             #     if _same_object(lhs, e.attr['cache']) and arr_replace.attr['mem_layer'] == 'global':
             #         replace_smem(node, lhs)
             #     e = e.attr['cache']
             
             # if 'storage' in eval.attr:
-            #     # print(codegen.gpu.to_string(lhs), codegen.gpu.to_string(eval.attr['storage']), codegen.gpu.to_string(node.eval), codegen.gpu.to_string(arr_replace), arr_replace.attr)
-            #     # print(lhs in eval.attr['storage'], not _same_object(lhs, node.eval), 'mem_layer' in arr_replace.attr and arr_replace.attr['mem_layer'] == 'smem')
             #     if arr_replace in eval.attr['storage'] and not _same_object(lhs, node.eval) and 'mem_layer' in arr_replace.attr and arr_replace.attr['mem_layer'] == 'smem':
             #         replace_reg(node, lhs)
-            # print(codegen.gpu.to_string(lhs), codegen.gpu.to_string(eval), codegen.gpu.to_string(node.eval), codegen.gpu.to_string(arr_replace), arr_replace.attr, codegen.gpu.to_string(node.eval.attr['storage']))
-            # if 'cache' in arr_replace.attr:
-            #     print(arr_replace.attr['cache'], codegen.gpu.to_string(arr_replace.attr['cache']))
             if _same_object(lhs, eval) and not _same_object(lhs, node.eval) and 'mem_layer' in arr_replace.attr and arr_replace.attr['mem_layer'] == 'smem':
                 replace_reg(node, lhs)
     
@@ -352,7 +345,6 @@ def add_indirect_cache(node, eval, C, D, *args):
         return [True, True, True, True, True]
     inacc_list = IRTraversal(get_indirect_access)(scope)
     
-    
     def _get_loop_pos(loop, target_arr):
         def action(s, res):
             if isinstance(s, Loop):
@@ -370,13 +362,13 @@ def add_indirect_cache(node, eval, C, D, *args):
         while isinstance(temp, Indexing):
             if isinstance(temp.idx, Indexing):
                 break
-            indices.append(temp.idx)
+            if 'parent_loop' in temp.idx.attr['loop'].attr:
+                indices.append(temp.idx)
             temp = temp.dobject
         
         cur_loop = _get_loop_pos(scope, temp)
         
         # cur_loop = indices[-1].attr['loop']
-        # cur_loop = i
         par_loop = cur_loop.attr['parent_loop']
         
 
@@ -385,7 +377,7 @@ def add_indirect_cache(node, eval, C, D, *args):
         buf_idx.idx = BlockIdx()
         buf_idx = Indexing(buf_idx, Literal(-1, 'int'))
         buf_idx.idx = ThreadIdy()
-        row_assign = None
+        outer_loop = None
 
         if len(eval.size) == 3:
             smem = Ndarray(eval.dtype, [2, D, D])
@@ -493,13 +485,13 @@ def add_indirect_cache(node, eval, C, D, *args):
             # node.decl.append(Decl(col_off))
             node.decl.append(Decl(res))
 
-
-        outer_loop.attr['load'] = True
-        par_loop.body.insert(0, SyncThreads())
-        par_loop.body.insert(0, outer_loop)
-        outer_loop.attr['parent_loop'] = par_loop
-    
-        # replace all refs
-        replace_all_ref(node.compute, inacc, res)
+        if outer_loop:
+            outer_loop.attr['load'] = True
+            par_loop.body.insert(0, SyncThreads())
+            par_loop.body.insert(0, outer_loop)
+            outer_loop.attr['parent_loop'] = par_loop
+        
+            # replace all refs
+            replace_all_ref(node.compute, inacc, res)
         
         

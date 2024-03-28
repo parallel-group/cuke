@@ -1,3 +1,4 @@
+from __future__ import annotations
 import codegen.cpu
 from ir import *
 from asg import *
@@ -68,7 +69,7 @@ def split_loop(node, bsize, idx: list|tuple):
         for i in body:
             if isinstance(i, Loop):
                 i.attr['parent_loop'] = new_loops[-1][1]
-            elif isinstance(i, list|tuple):
+            elif isinstance(i, (list, tuple)):
                 for j in i:
                     j.attr['parent_loop'] = new_loops[-1][1]
         new_loops[-1][1].body.extend(body)
@@ -79,7 +80,6 @@ def split_loop(node, bsize, idx: list|tuple):
             if len(new_loops) > 1:
                 for i in range(len(new_loops) - 2, -1, -1):
                     node.output_order.insert(order_idx, (axis, new_loops[i][1]))
-        # print(codegen.gpu.to_string(node.compute), node.output_order)
         else:
             node.output_order.extend(new_loops)
         new_loops = [(axis, new_loops[i][1]) for i in range(len(new_loops))]

@@ -93,24 +93,23 @@ class Shared(IR):
 
 
 def ir2gpu(ir):
-    match ir.__class__.__name__:
-        case 'GridDimx':
+    if isinstance(ir, GridDimx):
             return 'gridDimx.x'
-        case 'GridDimy':
+    elif isinstance(ir, GridDimy):
             return 'gridDimx.y'
-        case 'BlockIdx':
+    elif isinstance(ir, BlockIdx):
             return 'blockIdx.x'
-        case 'BlockIdy':
+    elif isinstance(ir, BlockIdy):
             return 'blockIdx.y'
-        case 'BlockDimx':
+    elif isinstance(ir, BlockDimx):
             return 'blockDim.x'
-        case 'BlockDimy':
+    elif isinstance(ir, BlockDimy):
             return 'blockDim.y'
-        case 'ThreadIdy':
+    elif isinstance(ir, ThreadIdy):
             return 'threadIdx.y'
-        case 'ThreadIdx':
+    elif isinstance(ir, ThreadIdx):
             return 'threadIdx.x'
-        case 'SyncThreads':
+    elif isinstance(ir, SyncThreads):
             return '__syncthreads();\n'
-        case 'SyncWarps':
+    elif isinstance(ir, SyncWarps):
             return '__syncwarps();\n'
