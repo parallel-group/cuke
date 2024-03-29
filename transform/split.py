@@ -1,3 +1,4 @@
+from __future__ import annotations
 import codegen.cpu
 from ir import *
 from asg import *
@@ -19,7 +20,7 @@ def _replace_loop(ir, old, new):
 # TODO: add support for filterloop
 def split_loop(node, bsize, idx: list|tuple):
     assert isinstance(node, TensorOp)
-    assert node.op_type in elementwise_op + ['apply', 'einsum', 'setval']
+    assert node.op_type in elementwise_op + ['apply', 'einsum', 'setval', 'norm', 'aggr']
     assert type(bsize) == int and bsize > 0
 
     scope = flatten(node.compute)
@@ -35,7 +36,8 @@ def split_loop(node, bsize, idx: list|tuple):
         if loop != None:
             scope = flatten(loop.body)
 
-    if loop != None and 'reduction' not in loop.attr:
+    # if loop != None and 'reduction' not in loop.attr:
+    if loop != None:
         new_loops = []
         tl = Loop(loop.start, loop.end, bsize, [])
         tl.attr['ptype'] = loop.attr['ptype']
@@ -67,7 +69,7 @@ def split_loop(node, bsize, idx: list|tuple):
         for i in body:
             if isinstance(i, Loop):
                 i.attr['parent_loop'] = new_loops[-1][1]
-            elif isinstance(i, list|tuple):
+            elif isinstance(i, (list, tuple)):
                 for j in i:
                     j.attr['parent_loop'] = new_loops[-1][1]
         new_loops[-1][1].body.extend(body)
@@ -78,7 +80,8 @@ def split_loop(node, bsize, idx: list|tuple):
             if len(new_loops) > 1:
                 for i in range(len(new_loops) - 2, -1, -1):
                     node.output_order.insert(order_idx, (axis, new_loops[i][1]))
-
+        else:
+            node.output_order.extend(new_loops)
         new_loops = [(axis, new_loops[i][1]) for i in range(len(new_loops))]
         for iorder in node.input_orders:
             iidx = None
@@ -92,7 +95,6 @@ def split_loop(node, bsize, idx: list|tuple):
         for i in range(len(new_loops)):
             if i>0:
                 new_loops[i][1].attr['parent_loop'] = new_loops[i-1][1]
-
 
 
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import inspect
 import helpers
 
@@ -8,7 +9,7 @@ arith_op = {'add': '+', 'sub': '-', 'mul': '*', 'floordiv': '/', 'truediv': '/'}
 math_op = ['round', 'abs', 'nbits']
 cmp_op = ['bigger', 'smaller']
 func_op = ['apply', 'reduce', 'aggr']
-other_op = ['setval', 'einsum', 'index', 'inline', 'size']
+other_op = ['setval', 'einsum', 'index', 'inline', 'size', 'norm']
 
 binary_elw = list(arith_op.keys()) + cmp_op
 unary_elw = math_op
@@ -140,8 +141,8 @@ class Tensor(ASTNode):
             raise TypeError('aggr must use a callable function')
 
     def aggr_sum(self, indices, axis=0, size=None):
-        func = lambda x, y: x + y
-        init = lambda x: setval(x, 0)
+        func = lambda x, y: setval(x, x+y)
+        init = lambda x: setval(x, 0.0)
         return self.aggr(func, init, indices, axis, size)
 
     def aggr_max(self, indices, axis=0, size=None):

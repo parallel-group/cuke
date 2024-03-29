@@ -17,15 +17,14 @@ def _replace_all_ref(stmt, old, new, attr=''):
         if isinstance(s, Loop):
             if attr in s.attr and s.attr[attr]:
                 return [False, False, False, False, False]
-        match s.__class__.__name__:
-            case 'Loop':
+        if isinstance(s, Loop):
                 if _same_object(s.start, old):
                     s.start = new
                 if _same_object(s.end, old):
                     s.end = new
                 if _same_object(s.step, old):
                     s.step = new
-            case 'FilterLoop':
+        elif isinstance(s, FilterLoop):
                 if _same_object(s.cond, old):
                     s.cond = new
                 if _same_object(s.start, old):
@@ -34,36 +33,43 @@ def _replace_all_ref(stmt, old, new, attr=''):
                     s.end = new
                 if _same_object(s.step, old):
                     s.step = new
-            case 'Expr':
+        elif isinstance(s, Expr):
                 if _same_object(s.left, old):
                     s.left = new
                 if _same_object(s.right, old):
                     s.right = new
-            case 'Assignment':
+        elif isinstance(s, Assignment):
                 if _same_object(s.lhs, old):
                     s.lhs = new
                 if _same_object(s.rhs, old):
                     s.rhs = new
-            case 'Indexing':
+        elif isinstance(s, Indexing):
                 if _same_object(s.dobject, old):
                     s.dobject = new
                 if _same_object(s.idx, old):
                     s.idx = new
-            case 'Slice':
+        elif isinstance(s, Slice):
                 if _same_object(s.start, old):
                     s.start = new
                 if _same_object(s.stop, old):
                     s.stop = new
                 if _same_object(s.step, old):
                     s.step = new
-            case 'Math':
-                if _same_object(s.val, old):
+        elif isinstance(s, Math):
+                if isinstance(s.val, (list, tuple)):
+                    for i in range(len(s.val)):
+                        if _same_object(s.val[i], old):
+                            s.val[i] = new
+                elif _same_object(s.val, old):
                     s.val = new
-            case 'Code':
-                if _same_object(s.output[1], old):
-                    s.output = (s.output[0], new)
+                # if _same_object(s.val, old):
+                #     s.val = new
+        elif isinstance(s, Code):
+                for k in s.outputs:
+                    if _same_object(s.outputs[k], old):
+                        s.outputs[k] = new
                 for k in s.inputs:
-                    if s.inputs[k] == old:
+                    if _same_object(s.inputs[k], old):
                         s.inputs[k] = new
         return [True, True, True, True, True]
 
@@ -79,7 +85,27 @@ def add_direct_cache(node, eval):
         return [True, True, True, True, True]
     
     assigns = IRTraversal(get_assigns)(scope)
+    lhs_list = []
+    for s in assigns:
+        if type(s) == Assignment:
+            if s.lhs not in lhs_list:
+                lhs_list.append(s.lhs)
     
+
+    
+    def get_noredu_assigns(s, res):
+        if type(s) in (Assignment, Code):
+            res.append(s)
+        elif isinstance(s, Loop) and 'reduction' in s.attr:
+            return [False, False, False, False, False]
+        return [True, True, True, True, True]
+    
+    assigns = IRTraversal(get_noredu_assigns)(scope)
+    no_redu_lhs_list = []
+    for s in assigns:
+        if type(s) == Assignment:
+            if s.lhs not in no_redu_lhs_list:
+                no_redu_lhs_list.append(s.lhs)
 
     def replace_reg(node, lhs):
         reg = Scalar(eval.dtype)
@@ -108,38 +134,6 @@ def add_direct_cache(node, eval):
                 _replace_all_ref(n.compute, lhs, reg)
 
         ASGTraversal(replace_refs)(node)
-    
-    # def _find_reduction_loop(loop):
-    #                 def action(s, res):
-    #                     if isinstance(s, Loop):
-    #                         if 'ptype' in s.attr and s.attr['ptype'] == 'reduction':
-    #                             res.append(s)
-    #                     return [True, True, True, True, True]
-
-    #                 r = IRTraversal(action)(loop)
-    #                 return r
-    
-    # for loop in scope:
-    #     redu_loop = _find_reduction_loop(loop)
-    #     for s in redu_loop:
-    #         assign = IRTraversal(get_assigns)(s)
-    #     # get lhs of last assignment
-    #     lhs = assign[-1].lhs
-    #     obj = get_obj(lhs)
-    #     # if it is set as smem, then replace it to smem
-    #     if 'mem_layer' in obj.attr and obj.attr['mem_layer'] == 'smem':
-    #         replace_reg(node, lhs)
-        
-        
-        
-
-    
-    lhs_list = []
-    for s in assigns:
-        if type(s) == Assignment:
-            # if not _same_object(s.lhs, node.eval) and s.lhs not in lhs_list:
-            if s.lhs not in lhs_list:
-                lhs_list.append(s.lhs)
                 
     def _get_split_loop_size(stmt, res):
         if isinstance(stmt, Loop):
@@ -221,7 +215,7 @@ def add_direct_cache(node, eval):
                         if stmt not in res:
                             res.append(stmt)
                         return [True, True, True, True, True]
-                    elif isinstance(stmt, list|tuple):
+                    elif isinstance(stmt, (list,tuple)):
                         for i in stmt:
                             action(i, res)
                         return [True, True, True, True, True]
@@ -285,12 +279,14 @@ def add_direct_cache(node, eval):
                         # break
             # e = eval
             # while 'cache' in e.attr:
-            #     # print(codegen.gpu.to_string(arr_replace), arr_replace.attr, codegen.gpu.to_string(e.attr['cache']))
             #     if _same_object(lhs, e.attr['cache']) and arr_replace.attr['mem_layer'] == 'global':
             #         replace_smem(node, lhs)
             #     e = e.attr['cache']
             
-            if _same_object(lhs, eval) and not _same_object(lhs, node.eval) and arr_replace.attr['mem_layer'] == 'smem':
+            # if 'storage' in eval.attr:
+            #     if arr_replace in eval.attr['storage'] and not _same_object(lhs, node.eval) and 'mem_layer' in arr_replace.attr and arr_replace.attr['mem_layer'] == 'smem':
+            #         replace_reg(node, lhs)
+            if _same_object(lhs, eval) and not _same_object(lhs, node.eval) and 'mem_layer' in arr_replace.attr and arr_replace.attr['mem_layer'] == 'smem':
                 replace_reg(node, lhs)
     
 
@@ -312,6 +308,28 @@ def _same_indirect_access(s1, s2):
             pass
         return False
 
+def _traverse_same_indirect(s1, s2):
+    def action(s, res):
+        if _same_indirect_access(s, s2):
+            res.append(True)
+        return [True, True, True, True, True]
+    t = IRTraversal(action)(s1)
+    if True in t:
+        return True
+    return False
+
+def _is_in_loopbody(loop, body, index):
+    for i, element in enumerate(body):
+        if isinstance(element, list|tuple):
+            index.append(i)
+            if _is_in_loopbody(loop, element, index):
+                return True
+            index.pop()
+        elif element == loop:
+            index.append(i)
+            return True
+    return False
+
 def add_indirect_cache(node, eval, C, D, *args):
     eval_list = []
     for tensor in args:
@@ -327,24 +345,39 @@ def add_indirect_cache(node, eval, C, D, *args):
         return [True, True, True, True, True]
     inacc_list = IRTraversal(get_indirect_access)(scope)
     
+    def _get_loop_pos(loop, target_arr):
+        def action(s, res):
+            if isinstance(s, Loop):
+                for i in s.body:
+                    if isinstance(i, Assignment):
+                        if _traverse_same_indirect(i.lhs, target_arr) or _traverse_same_indirect(i.rhs, target_arr):
+                            res.append(s)
+            return [True, True, True, True, True]
+        t = IRTraversal(action)(loop)
+        return t[0]
+
     for inacc in inacc_list:
         indices = []
         temp = inacc
         while isinstance(temp, Indexing):
             if isinstance(temp.idx, Indexing):
                 break
-            indices.append(temp.idx)
+            if 'parent_loop' in temp.idx.attr['loop'].attr:
+                indices.append(temp.idx)
             temp = temp.dobject
         
-        cur_loop = indices[-1].attr['loop']
-        par_loop = indices[-1].attr['loop'].attr['parent_loop']
+        cur_loop = _get_loop_pos(scope, temp)
+        
+        # cur_loop = indices[-1].attr['loop']
+        par_loop = cur_loop.attr['parent_loop']
+        
 
         # branch for matrix and vector
         buf_idx = Indexing(buf, Literal(-1, 'int'))
         buf_idx.idx = BlockIdx()
         buf_idx = Indexing(buf_idx, Literal(-1, 'int'))
         buf_idx.idx = ThreadIdy()
-        row_assign = None
+        outer_loop = None
 
         if len(eval.size) == 3:
             smem = Ndarray(eval.dtype, [2, D, D])
@@ -370,36 +403,43 @@ def add_indirect_cache(node, eval, C, D, *args):
             col_loop.body.append(load)
 
             # data access
-            idx = Scalar(dtype='int')
-            idx_assign = Assignment(idx, Expr(Expr(buf_idx, C, '<'), buf_idx, 'ternary', Expr(buf_idx, C, '-')))
+            # idx = Scalar(dtype='int')
+            # idx_assign = Assignment(idx, Expr(Expr(buf_idx, C, '<'), buf_idx, 'ternary', Expr(buf_idx, C, '-')))
 
-            row_off = Scalar(dtype='int')
-            row_assign = Assignment(row_off, Expr(Expr(buf_idx, C, '<'), Expr(indices[1], indices[1].attr['loop'].attr['parent_loop'].iterate, '-'), 'ternary', indices[1]))
-            col_off = Scalar(dtype='int')
-            col_assign = Assignment(col_off, Expr(Expr(buf_idx, C, '<'), Expr(indices[0], indices[0].attr['loop'].attr['parent_loop'].iterate, '-'), 'ternary', indices[0]))
+            # row_off = Scalar(dtype='int')
+            # row_assign = Assignment(row_off, Expr(Expr(buf_idx, C, '<'), Expr(indices[1], indices[1].attr['loop'].attr['parent_loop'].iterate, '-'), 'ternary', indices[1]))
+            # col_off = Scalar(dtype='int')
+            # col_assign = Assignment(col_off, Expr(Expr(buf_idx, C, '<'), Expr(indices[0], indices[0].attr['loop'].attr['parent_loop'].iterate, '-'), 'ternary', indices[0]))
 
-            load_smem = Indexing(smem, idx)
-            load_smem = Indexing(load_smem, row_off)
-            load_smem = Indexing(load_smem, col_off)
-            new_rhs = Indexing(eval.dobject, idx)
-            new_rhs = Indexing(new_rhs, row_off)
-            new_rhs = Indexing(new_rhs, col_off)
+            # load_smem = Indexing(smem, idx)
+            # load_smem = Indexing(load_smem, row_off)
+            # load_smem = Indexing(load_smem, col_off)
+            # new_rhs = Indexing(eval.dobject, idx)
+            # new_rhs = Indexing(new_rhs, row_off)
+            # new_rhs = Indexing(new_rhs, col_off)
+
+            load_smem = Indexing(smem, buf_idx)
+            load_smem = Indexing(load_smem, Expr(indices[1], indices[1].attr['loop'].attr['parent_loop'].iterate, '-'))
+            load_smem = Indexing(load_smem, Expr(indices[0], indices[0].attr['loop'].attr['parent_loop'].iterate, '-'))
+            new_rhs = Indexing(eval.dobject, Expr(buf_idx, C, '-'))
+            new_rhs = Indexing(new_rhs, indices[1])
+            new_rhs = Indexing(new_rhs, indices[0])
 
             res = Scalar(eval.dtype)
             res_assign = Assignment(res, Expr(Expr(buf_idx, C, '<'), load_smem, 'ternary', new_rhs))
 
             cur_loop.body.insert(0, res_assign)
-            cur_loop.body.insert(0, col_assign)
-            cur_loop.body.insert(0, row_assign)
-            cur_loop.body.insert(0, idx_assign)
+            # cur_loop.body.insert(0, col_assign)
+            # cur_loop.body.insert(0, row_assign)
+            # cur_loop.body.insert(0, idx_assign)
 
-            node.decl.append(Decl(idx))
-            node.decl.append(Decl(col_off))
+            # node.decl.append(Decl(idx))
+            # node.decl.append(Decl(col_off))
             node.decl.append(Decl(res))
-            node.decl.append(Decl(row_off))
+            # node.decl.append(Decl(row_off))
             
         elif len(eval.size) == 2:
-            smem = Ndarray(eval.dtype, [C, D])
+            smem = Ndarray(eval.dtype, [2, D])
             smem.attr['mem_layer'] = 'smem'
             node.decl.append(Decl(smem))
 
@@ -419,34 +459,39 @@ def add_indirect_cache(node, eval, C, D, *args):
             outer_loop.body.append(load)
 
             # data access
-            idx = Scalar(dtype='int')
-            idx_assign = Assignment(idx, Expr(Expr(buf_idx, C, '<'), buf_idx, 'ternary', Expr(buf_idx, C, '-')))
+            # idx = Scalar(dtype='int')
+            # idx_assign = Assignment(idx, Expr(Expr(buf_idx, C, '<'), buf_idx, 'ternary', Expr(buf_idx, C, '-')))
 
-            col_off = Scalar(dtype='int')
-            col_assign = Assignment(col_off, Expr(Expr(buf_idx, C, '<'), Expr(indices[0], indices[0].attr['loop'].attr['parent_loop'].iterate, '-'), 'ternary', indices[0]))
-            load_smem = Indexing(smem, idx)
-            load_smem = Indexing(load_smem, col_off)
-            new_rhs = Indexing(eval.dobject, idx)
-            new_rhs = Indexing(new_rhs, col_off)
+            # col_off = Scalar(dtype='int')
+            # col_assign = Assignment(col_off, Expr(Expr(buf_idx, C, '<'), Expr(indices[0], indices[0].attr['loop'].attr['parent_loop'].iterate, '-'), 'ternary', indices[0]))
+            # load_smem = Indexing(smem, idx)
+            # load_smem = Indexing(load_smem, col_off)
+            # new_rhs = Indexing(eval.dobject, idx)
+            # new_rhs = Indexing(new_rhs, col_off)
+            
+            load_smem = Indexing(smem, buf_idx)
+            load_smem = Indexing(load_smem, Expr(indices[0], indices[0].attr['loop'].attr['parent_loop'].iterate, '-'))
+            new_rhs = Indexing(eval.dobject, Expr(buf_idx, C, '-'))
+            new_rhs = Indexing(new_rhs, indices[0])
 
             res = Scalar(eval.dtype)
             res_assign = Assignment(res, Expr(Expr(buf_idx, C, '<'), load_smem, 'ternary', new_rhs))
             
             cur_loop.body.insert(0, res_assign)
-            cur_loop.body.insert(0, col_assign)
-            cur_loop.body.insert(0, idx_assign)
+            # cur_loop.body.insert(0, col_assign)
+            # cur_loop.body.insert(0, idx_assign)
             
-            node.decl.append(Decl(idx))
-            node.decl.append(Decl(col_off))
+            # node.decl.append(Decl(idx))
+            # node.decl.append(Decl(col_off))
             node.decl.append(Decl(res))
 
-
-        outer_loop.attr['load'] = True
-        par_loop.body.insert(0, SyncThreads())
-        par_loop.body.insert(0, outer_loop)
-        outer_loop.attr['parent_loop'] = par_loop
-    
-        # replace all refs
-        replace_all_ref(node.compute, inacc, res)
+        if outer_loop:
+            outer_loop.attr['load'] = True
+            par_loop.body.insert(0, SyncThreads())
+            par_loop.body.insert(0, outer_loop)
+            outer_loop.attr['parent_loop'] = par_loop
+        
+            # replace all refs
+            replace_all_ref(node.compute, inacc, res)
         
         

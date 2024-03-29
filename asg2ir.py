@@ -1,3 +1,4 @@
+from __future__ import annotations
 import copy
 import ir
 import asg
@@ -150,6 +151,10 @@ def gen_ir(node):
             res = node.eval
             compute = node.compute
 
+            if compute == []:
+                par_loop = None
+            else:
+                par_loop = compute[0]
             for level in range(max_levels):
 
                 # handle out of bound slicing
@@ -178,7 +183,6 @@ def gen_ir(node):
                 loop_ofs = max(left_ofs, right_ofs)
                 if loop_ofs > 0:
                     pre_loop.attr['loop_ofs'] = loop_ofs
-
                 if level < left_levels:
                     lhs = bind(lhs, [pre_loop.iterate], [left_attr])
                     node.input_orders[0].append((level, pre_loop))
@@ -188,13 +192,14 @@ def gen_ir(node):
                 res = bind(res, [pre_loop.iterate])
                 node.output_order.append((level, pre_loop))
                 pre_loop.attr['output_axis'] = level
+                if par_loop:
+                    pre_loop.attr['parent_loop'] = par_loop
+                else:
+                    par_loop = pre_loop
                 compute.append(pre_loop)
                 compute = pre_loop.body
             
             compute.append(ir.Assignment(res, ir.Expr(lhs, rhs, op)))
-            # assign = ir.Assignment(res, ir.Expr(lhs, rhs, op))
-            # assign.attr['parent_loop'] = pre_loop
-            # compute.append(assign)
 
         elif node.op_type in asg.math_op:
             gen_ir(node.operators[0])
@@ -274,9 +279,21 @@ def gen_ir(node):
                     l = l.body[0]
             else:
                 node.operators[1].decl = [d for d in node.operators[1].decl if d.dobject != node.operators[1].eval]
+                # find all defs and replace them with new node eval
+                for dfs in helpers.ir_find_defs(node.operators[1].compute, node.operators[1].eval):
+                    if isinstance(dfs.lhs, ir.Indexing):
+                        temp = dfs.lhs
+                        idx_list = []
+                        while isinstance(temp, ir.Indexing):
+                            idx_list.append(temp.idx)
+                            temp = temp.dobject
+                        idx_list.reverse()
+                        res = bind(node.eval, idx_list)
+                        helpers.replace_all_ref(node.operators[1].compute, dfs.lhs, res)
+                    else:
+                        replace_output(node.operators[1].compute, node.operators[1].eval, node.eval)
                 node.operators[1].eval = node.eval
-                replace_output(node.operators[1].compute, node.operators[1].eval, node.eval)
-
+                node.output_order = node.operators[1].output_order
 
         elif node.op_type == 'einsum':
             gen_ir(node.operators[0])
@@ -407,7 +424,7 @@ def gen_ir(node):
                 node.eval.attr[key] = node.operators[0].eval.attr[key]
 
         elif node.op_type == 'apply':
-
+    
             # operators: func, data (node.nparams), axis (node.nparams), out_ofs, cond, items (node.nparams), ret
             for i in range(1, 3 + 2 * node.nparams):
                 if node.operators[i] != None:
@@ -624,8 +641,7 @@ def gen_ir(node):
                     res.extend(node.compute)
                     node.compute.clear()
 
-            t = asg.ASGTraversal(action)
-            ret_compute = t(ret)
+            ret_compute = helpers.ASGTraversal(action)(ret)
             
             for nn in ret_compute:
                 nn.attr['parent_loop'] = outer_loop
@@ -634,7 +650,7 @@ def gen_ir(node):
 
             replace_output(node.compute, ret.eval, item1.eval)
             node.decl = [d for d in node.decl if d.dobject != ret.eval]
-
+            
             node.output_order = [(0, outer_loop)]
             for i in range(len(ret.output_order)):
                 node.output_order.append((i + 1, ret.output_order[i][1]))
@@ -664,6 +680,7 @@ def gen_ir(node):
             node.eval = ir.Scalar(node.operators[0]._size()[0].dtype)
             node.decl = [ir.Decl(node.eval)]
             node.compute = [ir.Assignment(node.eval, node.operators[0].eval.size[axis])]
+
         node.eval.attr['storage'] = []
 
 
