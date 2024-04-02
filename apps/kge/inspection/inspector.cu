@@ -115,14 +115,14 @@ __global__ void build_index(torch::PackedTensorAccessor32<int64_t, 1, torch::Res
 
     // exceed threshold
     // if (idx_count[tid]>0 && tid < T) {
-    if ( tid < T) {
+    if (tid < T && count[tid] > T-1) {
         iuniq[tid] = idx[idx_count[tid]]; }
     __syncthreads();
     
-    if (ibuf[tid] == ord_uniq[0]){
+    if (ibuf[tid] == ord_uniq[0] && iuniq[0] < rel_num){
         ibuf[tid] = 0;
     }
-    else if (ibuf[tid] == ord_uniq[1]){
+    else if (ibuf[tid] == ord_uniq[1] && iuniq[1] < rel_num){
         ibuf[tid] = 1;
     }
     else{
@@ -136,7 +136,7 @@ __global__ void build_index(torch::PackedTensorAccessor32<int64_t, 1, torch::Res
 }
 
 
-void gpu_sort(torch::Tensor head, torch::Tensor tail, torch::Tensor relation, torch::Tensor r_Uniq, torch::Tensor r_Buffer, torch::Tensor uniq_cnt, int batch, int rel_num) {
+void gpu_sort(torch::Tensor relation, torch::Tensor r_Uniq, torch::Tensor r_Buffer, torch::Tensor uniq_cnt, int batch, int rel_num) {
 
     build_index<<< batch/C, C>>>(relation.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(), r_Uniq.packed_accessor32<int64_t, 2, torch::RestrictPtrTraits>(), r_Buffer.packed_accessor32<int64_t, 2, torch::RestrictPtrTraits>(), uniq_cnt.packed_accessor32<int64_t, 1, torch::RestrictPtrTraits>(), rel_num);
 

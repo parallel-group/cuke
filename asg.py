@@ -1,3 +1,4 @@
+from __future__ import annotations
 import inspect
 import helpers
 
@@ -8,7 +9,7 @@ arith_op = {'add': '+', 'sub': '-', 'mul': '*', 'floordiv': '/', 'truediv': '/',
 math_op = ['round', 'abs', 'nbits']
 cmp_op = ['bigger', 'smaller']
 func_op = ['apply', 'reduce', 'aggr']
-other_op = ['setval', 'einsum', 'index', 'inline', 'size', 'view']
+other_op = ['setval', 'einsum', 'index', 'inline', 'size', 'norm']
 
 binary_elw = list(arith_op.keys()) + cmp_op
 unary_elw = math_op

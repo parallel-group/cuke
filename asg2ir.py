@@ -1,3 +1,4 @@
+from __future__ import annotations
 import copy
 import ir
 import asg
@@ -230,6 +231,10 @@ def gen_ir(node):
             rhs_subscripts = []
             res_subscripts = []
 
+            if compute == []:
+                par_loop = None
+            else:
+                par_loop = compute[0]
             for level in range(max_levels):
 
                 # handle out of bound slicing
@@ -268,6 +273,10 @@ def gen_ir(node):
                 res_subscripts.append(pre_loop.iterate)
                 node.output_order.append((level, pre_loop))
                 pre_loop.attr['output_axis'] = level
+                if par_loop:
+                    pre_loop.attr['parent_loop'] = par_loop
+                else:
+                    par_loop = pre_loop
                 compute.append(pre_loop)
                 compute = pre_loop.body
 
@@ -354,9 +363,21 @@ def gen_ir(node):
                     l = l.body[0]
             else:
                 node.operators[1].decl = [d for d in node.operators[1].decl if d.dobject != node.operators[1].eval]
+                # find all defs and replace them with new node eval
+                for dfs in helpers.ir_find_defs(node.operators[1].compute, node.operators[1].eval):
+                    if isinstance(dfs.lhs, ir.Indexing):
+                        temp = dfs.lhs
+                        idx_list = []
+                        while isinstance(temp, ir.Indexing):
+                            idx_list.append(temp.idx)
+                            temp = temp.dobject
+                        idx_list.reverse()
+                        res = bind(node.eval, idx_list)
+                        helpers.replace_all_ref(node.operators[1].compute, dfs.lhs, res)
+                    else:
+                        replace_output(node.operators[1].compute, node.operators[1].eval, node.eval)
                 node.operators[1].eval = node.eval
-                replace_output(node.operators[1].compute, node.operators[1].eval, node.eval)
-
+                node.output_order = node.operators[1].output_order
 
         elif node.op_type == 'einsum':
             gen_ir(node.operators[0])
@@ -764,8 +785,7 @@ def gen_ir(node):
                     res.extend(node.compute)
                     node.compute.clear()
 
-            t = asg.ASGTraversal(action)
-            ret_compute = t(ret)
+            ret_compute = helpers.ASGTraversal(action)(ret)
             
             for nn in ret_compute:
                 nn.attr['parent_loop'] = outer_loop

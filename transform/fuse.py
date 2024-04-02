@@ -2,7 +2,7 @@ from asg import *
 from ir import *
 import codegen
 from helpers import get_obj, get_val, rebind_iterate, flatten_remove, ir_uses, remove_decl, clear_compute, \
-    ir_find_defs, same_object, flatten, ASGTraversal, replace_all_ref
+    ir_find_defs, same_object, flatten, ASGTraversal, replace_all_ref, has_same_iteration_space, IRTraversal, ir_find_uses
 from asg2ir import gen_ir
 
 
@@ -75,6 +75,18 @@ def _replace_arrindex_with_scalar(ir, old, new):
             obj = get_obj(ir.val)
             if obj.dobject_id == old.dobject_id:
                 ir.val = new
+        elif type(ir.val) in (list, tuple):
+            new_val = []
+            for i in ir.val:
+                obj = get_obj(i)
+                if type(obj) in (Indexing, Scalar, Ndarray, Literal, int):
+                    if obj.dobject_id == old.dobject_id:
+                        new_val.append(new)
+                    else:
+                        new_val.append(i)
+                else:
+                    new_val.append(i)
+            ir.val = new_val
         else:
             _replace_arrindex_with_scalar(ir.val, old, new)
     elif type(ir) == Code:
@@ -216,8 +228,7 @@ def basic_rule(node, res):
 
     elif type(node) == TensorOp and node.op_type == 'index':
         if type(node.operators[1]) == TensorOp and node.operators[1].op_type in (
-                elementwise_op + ['setval']) and len(
-            node.operators[1].ref_by) == 1:
+                elementwise_op + ['setval']) and len(node.operators[1].ref_by) == 1:
             assert len(node.operators[1]._size()) == 0
             dfs = ir_find_defs(node.operators[1].compute, node.operators[1].eval)
             if len(dfs) > 0:
@@ -243,8 +254,11 @@ def basic_rule(node, res):
                         replace_all_ref(node.compute[0], node.operators[i].eval, df)
                         clear_compute(node.operators[i])
                         remove_decl(node.operators[i], node.operators[i].eval)
-
-
+    
+    elif type(node) == TensorOp and node.op_type == 'aggr':
+        if type(node.operators[0]) == TensorOp and node.operators[0].op_type in (
+                elementwise_op + ['apply', 'setval']) and len(node.operators[0].ref_by) == 1:
+            fuse_operators(node, node.output_order, node.operators[0])
 
 # def test1():
 #     A = Tensor((10, 20))

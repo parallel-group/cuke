@@ -1,4 +1,4 @@
-import codegen.cpu
+import codegen
 from ir import *
 from asg import *
 from helpers import rebind_iterate
@@ -41,7 +41,10 @@ def output_reorder(node, dim_order, tile_size):
         reorder_nest.append(l)
         if tl != None:
             output_order.append((dim_order[i], tl))
-
+    # print('reorder_nest', reorder_nest)
+    print(codegen.gpu.to_string(tile_loops))
+    print(codegen.gpu.to_string(reorder_nest))
+    # print('output_order', output_order)
     for i in range(len(reorder_nest)):
         ts = tile_size[i]
         if ts > 1:
@@ -58,10 +61,9 @@ def output_reorder(node, dim_order, tile_size):
             output_order.append((dim_order[i], new_l))
 
     tile_loops = [l for l in tile_loops if l != None]
-
+    print(tile_loops)
     for i in range(len(tile_loops)-1, 0, -1):
         tile_loops[i-1].body.append(tile_loops[i])
-
     body = loop_nest[-1].body
 
     for i in range(len(dim_order)):
@@ -77,22 +79,23 @@ def output_reorder(node, dim_order, tile_size):
 
 
 if __name__ == "__main__":
-    A = Tensor('a', (10, 20))
-    B = Tensor('b', (20, 30))
-    C = Tensor('c', (10, 30))
+    from asg2ir import gen_ir
+    A = Tensor((10, 20), name='a')
+    B = Tensor((20, 30), name='b')
+    C = Tensor((10, 30), name='c')
     res1 = A @ B
-    ir1 = res1._gen_ir()
-    print(res1.output_order)
+    ir1 = gen_ir(res1)
+    # print(res1.output_order)
     code = codegen.cpu.print_cpp(ir1)
-    print(code)
+    # print(code)
 
     TS1 = 5
     TS2 = 10
 
     output_reorder(ir1, [0, 1], [TS1, TS2])
-    print(res1.output_order)
+    # print(res1.output_order)
     code = codegen.cpu.print_cpp(ir1)
-    print(code)
+    # print(code)
 
     # res2 = res1 + C
     # ir2 = res2._gen_ir()
