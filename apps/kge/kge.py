@@ -1,7 +1,7 @@
 import transform
 import run
 from codegen import *
-from helpers import new_op, ASGTraversal, IRTraversal, flatten, get_obj
+from helpers import ASGTraversal, IRTraversal, flatten, get_obj
 from transform.fuse import basic_rule, fuse_operators
 from asg import *
 from asg2ir import gen_ir
