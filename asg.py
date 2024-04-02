@@ -4,11 +4,11 @@ import helpers
 MIN_INT = -2147483648
 MAX_INT = 2147483647
 
-arith_op = {'add': '+', 'sub': '-', 'mul': '*', 'floordiv': '/', 'truediv': '/'}
+arith_op = {'add': '+', 'sub': '-', 'mul': '*', 'floordiv': '/', 'truediv': '/', 'mod': '%'}
 math_op = ['round', 'abs', 'nbits']
 cmp_op = ['bigger', 'smaller']
 func_op = ['apply', 'reduce', 'aggr']
-other_op = ['setval', 'einsum', 'index', 'inline', 'size']
+other_op = ['setval', 'einsum', 'index', 'inline', 'size', 'view']
 
 binary_elw = list(arith_op.keys()) + cmp_op
 unary_elw = math_op
@@ -16,6 +16,14 @@ elementwise_op = binary_elw + unary_elw
 
 int_types = ['int', 'int32_t', 'int64_t']
 float_types = ['float', 'double']
+
+
+def new_op(func):
+    def wrapper_func(*args, **kwargs):
+        _res = func(*args, **kwargs)
+        _res.attr['op_name'] = func.__name__
+        return _res
+    return wrapper_func
 
 def bigger(x, y):
     return TensorOp('bigger', x, y)
@@ -112,7 +120,7 @@ class Tensor(ASTNode):
         else:
             raise TypeError('reduce must use a callable function')
 
-    @helpers.new_op
+    @new_op
     def sum(self, axis=0):
         s1 = ''
         rs = ''
@@ -189,6 +197,9 @@ class Tensor(ASTNode):
     def nbits(self):
         return TensorOp('nbits', self)
 
+    def view(self, sizes, dims):
+        return TensorOp('view', self, sizes, dims)
+
 
 class Var(Tensor):
     def __init__(self, dtype='int', name=None):
@@ -238,18 +249,19 @@ class TensorOp(Tensor):
                 opr.ref_by.append(self)
 
         if op_type in arith_op or op_type in cmp_op:
+            # TODO: infer dtype
             dtype = operators[0].dtype
             if type(self.operators[0]) == int:
-                assert(dtype in int_types)
+                # assert(dtype in int_types)
                 self.operators[0] = Const(self.operators[0], dtype)
             elif type(operators[0]) == float:
-                assert(dtype in float_types)
+                # assert(dtype in float_types)
                 self.operators[0] = Const(self.operators[0], dtype)
             if type(self.operators[1]) == int:
-                assert(dtype in int_types)
+                # assert(dtype in int_types)
                 self.operators[1] = Const(self.operators[1], dtype)
             elif type(operators[1]) == float:
-                assert(dtype in float_types)
+                # assert(dtype in float_types)
                 self.operators[1] = Const(self.operators[1], dtype)
             assert helpers.prefix_match_size(self.operators[0]._size(), self.operators[1]._size())
             if (len(self.operators[0]._size()) > len(self.operators[1]._size())):
@@ -278,6 +290,38 @@ class TensorOp(Tensor):
                         ref_size.append(op2_size[pos2])
                     else:
                         raise IndexError('index not found!')
+
+        elif op_type == 'view':
+            dtype = operators[0].dtype
+            # view sizes and dims must be int literal or const
+            sizes = []
+            for s in operators[1]:
+                if type(s) == Const and s.dtype in int_types:
+                    sizes.append(s)
+                elif type(s) == int:
+                    sizes.append(Const(s, 'int'))
+                else:
+                    raise TypeError('tensor dimensions must be int or a scalar int variable')
+            dims = []
+            for s in operators[2]:
+                if type(s) == Const and s.dtype in int_types:
+                    dims.append(s)
+                elif type(s) == int:
+                    dims.append(Const(s, 'int'))
+                elif type(s) in (list, tuple):
+                    d = []
+                    for ss in s:
+                        if type(ss) == Const and ss.dtype in int_types:
+                            d.append(ss)
+                        elif type(ss) == int:
+                            d.append(Const(ss, 'int'))
+                    dims.append(d)
+                else:
+                    raise TypeError('tensor dimensions must be int or a scalar int variable')
+            # TODO: check if sizes is consistent with ref_size of the original tensor
+            ref_size = sizes
+            self.operators.pop()
+            self.operators[1] = dims
 
         elif op_type == 'index':
             dtype = operators[0].dtype

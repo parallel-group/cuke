@@ -1,5 +1,7 @@
 import torch
-from asg import Tensor, Var, apply
+
+import helpers
+from asg import Tensor, Var, apply, Const
 from asg2ir import gen_ir
 import codegen
 import run
@@ -1177,6 +1179,179 @@ def prefix_sum4():
     print(code)
 
 
+def view_test1():
+    data = Tensor((1024, ))
+    view1 = data.view((16, 64, 64), (0, -1, 0))
+    view2 = view1.view((1024, 64), ([0,1], 2))
+
+    gen_ir(view2)
+    # print([s.val for s in view1.ref_size])
+    # print(view1.eval.size[0].val)
+    # print(view1.attr['dim_map'])
+    # print([s.val for s in view1.attr['size_map']])
+    # print('--------------------')
+    # print([s.val for s in view2.ref_size])
+    # print(view2.eval.size[0].val)
+    # print(view2.attr['dim_map'])
+    # print([s.val for s in view2.attr['size_map'][0]])
+    # print(view2.attr['size_map'][1].val)
+
+def view_test2():
+    data = Tensor((1024, ))
+    view1 = data.view((16, 64), (0, 0))
+    i = Var(name='i')
+
+    tmp1 = view1[i]
+
+    view2 = tmp1.view((4, 16), (0, 0))
+
+    k = Var(name='k')
+    tmp2 = view2[k]
+    tmp3 = Tensor(tmp2.ref_size)
+    res = tmp2 + tmp3
+
+    ir = gen_ir(res)
+    code = codegen.cpu.print_cpp(ir)
+    print(code)
+
+    print(view2.attr['dim_map'])
+    print([s.val for s in view2.attr['size_map']])
+
+
+def view_test3():
+    data = Tensor((1024, ))
+    view1 = data.view((16, 64), (0, 0))
+    i = Var(name='i')
+
+    tmp1 = view1[:, i]
+
+    view2 = tmp1.view((4, 4), (0, 0))
+
+    k = Var(name='k')
+    tmp2 = view2[k]
+    tmp3 = Tensor(tmp2.ref_size)
+    res = tmp2 + tmp3
+
+    ir = gen_ir(res)
+    code = codegen.cpu.print_cpp(ir)
+    print(code)
+
+    print(tmp1.eval)
+    print(view2.attr['dim_map'])
+    print([s.val for s in view2.attr['size_map']])
+
+def view_test4():
+    data = Tensor((1024, ))
+    view1 = data.view((16, 64), (0, 0))
+    i = Var(name='i')
+
+    tmp1 = view1[:, i]
+
+    view2 = tmp1.view((4, 4), (0, 0))
+
+    k = Var(name='k')
+    tmp2 = view2[:, k]
+    tmp3 = Tensor(tmp2.ref_size)
+    res = tmp2 + tmp3
+
+    ir = gen_ir(res)
+    code = codegen.cpu.print_cpp(ir)
+    print(code)
+
+    print(tmp1.eval)
+    print(view2.attr['dim_map'])
+    print([s.val for s in view2.attr['size_map']])
+
+def view_test5():
+    data = Tensor((1024, ))
+    view1 = data.view((16, 8, 8), (0, 0, 0))
+    i = Var(name='i')
+
+    tmp1 = view1[i]
+    tmp2 = Tensor(tmp1.ref_size)
+    res = tmp1 + tmp2
+    ir = gen_ir(res)
+
+    code = codegen.cpu.print_cpp(ir)
+    print(code)
+
+
+def view_test6():
+    data = Tensor((1024, ))
+    view1 = data.view((16, 8, 8), (0, 0, 0))
+    i = Var(name='i')
+    j = Var(name='j')
+
+    tmp1 = view1[:, i, j]
+    tmp2 = Tensor(tmp1.ref_size)
+    res = tmp1 + tmp2
+    ir = gen_ir(res)
+
+    code = codegen.cpu.print_cpp(ir)
+    print(code)
+
+
+def view_test7():
+    data = Tensor((1024, ))
+    view1 = data.view((16, 64, 64), (0, -1, 0))
+    tmp1 = Tensor(view1.ref_size)
+    res = view1 + tmp1
+
+    ir = gen_ir(res)
+
+    print(view1.ref_size)
+    print(view1.eval.size)
+    print(view1.attr['dim_map'])
+    print([s.val for s in view1.attr['size_map']])
+    code = codegen.cpu.print_cpp(ir)
+    print(code)
+
+
+def view_test8():
+    data = Tensor((1024, ))
+    view1 = data.view((16, 64, 64), (0, -1, 0))
+    i = Var(name='i')
+    tmp1 = view1[i]
+    tmp2 = Tensor(tmp1.ref_size)
+    res = tmp1 + tmp2
+
+    ir = gen_ir(res)
+    code = codegen.cpu.print_cpp(ir)
+    print(code)
+
+    print(tmp1.attr['dim_map'])
+    print(tmp1.eval.size)
+
+def view_test9():
+    data = Tensor((4, 8))
+    view1 = data.view((32, ), ([0, 1], ))
+    i = Var(name='i')
+    tmp1 = view1[i]
+    tmp2 = Var(name='tmp2')
+    res = tmp1 + tmp2
+    ir = gen_ir(res)
+    code = codegen.cpu.print_cpp(ir)
+    print(code)
+    print(tmp1.ref_size)
+    print(tmp1.eval.size)
+    print(tmp1.attr['dim_map'])
+    print(tmp1.attr['size_map'])
+
+
+def view_test10():
+    data = Tensor((4, 8))
+    view1 = data.view((32, 16), ([0, 1], -1))
+    i = Var(name='i')
+    tmp1 = view1[i]
+    tmp2 = Tensor(tmp1.ref_size)
+    res = tmp1 + tmp2
+    ir = gen_ir(res)
+    code = codegen.cpu.print_cpp(ir)
+    print(code)
+    print(tmp1.ref_size)
+    print(tmp1.eval.size)
+    print(tmp1.attr['dim_map'])
+    print(tmp1.attr['size_map'])
 
 if __name__ == "__main__":
     # basic tensor indexing tests
@@ -1202,7 +1377,7 @@ if __name__ == "__main__":
     # test13_1()
     # test14()
     # some slicing examples
-    test15()
+    # test15()
     # test16()
     # test17()
     # test18()
@@ -1246,3 +1421,14 @@ if __name__ == "__main__":
     # prefix_sum2()
     # prefix_sum3()
     # prefix_sum4()
+    # view tests
+    # view_test1()
+    # view_test2()
+    # view_test3()
+    # view_test4()
+    # view_test5()
+    # view_test6()
+    # view_test7()
+    # view_test8()
+    # view_test9()
+    view_test10()

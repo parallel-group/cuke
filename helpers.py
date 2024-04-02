@@ -210,12 +210,6 @@ def collect_ir(ast, stmt):
     stmt.extend(t(ast))
 
 
-def new_op(func):
-    def wrapper_func(*args, **kwargs):
-        _res = func(*args, **kwargs)
-        _res.attr['op_name'] = func.__name__
-        return _res
-    return wrapper_func
 
 
 def get_obj(stmt: (ir.Indexing, ir.Ndarray, ir.Scalar)):
