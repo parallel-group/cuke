@@ -1380,7 +1380,7 @@ def neg_transE():
     vt = Eemb[t]
     vr = Remb[r]
 
-    vt_view1 = vt.view((64, 16, 64, dim), (-1, 0, 0, 1))
+    vt_view1 = vt.view((16, 64, 64, dim), (0, -1, 0, 1))
     vt_view2 = vt_view1.view((1024, 64, dim), ([0, 1], 2, 3))
     vh = vh.view((1024, 64, dim), (0, -1, 1))
 
@@ -1389,10 +1389,10 @@ def neg_transE():
     print(code)
 
     # print(vt.ref_size)
-    print(vt_view2.ref_size)
-    print(vt_view2.eval.size)
-    print(vt_view2.attr['dim_map'])
-    print(vt_view2.attr['size_map'])
+    # print(vt_view2.ref_size)
+    # print(vt_view2.eval.size)
+    # print(vt_view2.attr['dim_map'])
+    # print(vt_view2.attr['size_map'])
 
 
 if __name__ == "__main__":

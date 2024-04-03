@@ -199,6 +199,21 @@ def get_ir_of_size(size):
         ir_size.append(s.eval)
     return ir_size
 
+def list_same_size(l1, l2):
+    if len(l1) != len(l2):
+        return False
+    for i in range(len(l1)):
+        if type(l1[i]) in (list, tuple):
+            if not type(l2[i]) in (list, tuple):
+                return False
+            else:
+                if not list_same_size(l1[i], l2[i]):
+                    return False
+        else:
+            if type(l2[i]) in (list, tuple):
+                return False
+    return True
+
 def collect_ir(ast, stmt):
     def action(node, res):
         if isinstance(node, asg.Tensor):

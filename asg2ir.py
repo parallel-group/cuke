@@ -92,85 +92,100 @@ def replace_output(stmt, old, new):
             replace_output(stmt.dobject, old, new)
 
 
-def get_subdims(x, sizes):
-    res = []
+def list_product(l):
+    res = ir.Literal(1)
+    for x in l:
+        if not type(x) in (tuple, list):
+            res = ir.Expr(res, x, '*')
+        else:
+            res = ir.Expr(res, list_product(x), '*')
+    return res
+
+def get_subdims(x, dims, sizes):
+    res = dict()
     y = x
     for i in range(len(sizes)):
-        res.append(ir.Expr(y, sizes[len(sizes)-1-i], '%'))
-        y = ir.Expr(x, sizes[len(sizes)-1-i], '/')
-    return reversed(res)
+        d = dims[len(sizes) - 1 - i]
+        s = sizes[len(sizes) - 1 - i]
+        if not type(d) in (tuple, list):
+            if d not in res:
+                res[d] = [(ir.Expr(y, s, '%'), s)]
+            else:
+                res[d].append((ir.Expr(y, s, '%'), s))
+        else:
+            ts = list_product(s)
+            sd = get_subdims(ir.Expr(y, ts, '%'), d, s)
+            for k in sd:
+                if k not in res:
+                    res[k] = sd[k]
+                else:
+                    res[k].extend(sd[k])
+        y = ir.Expr(x, s, '/')
 
+    return res
 
-
-
-
-def resolve_views(node, subscripts):
+def resolve_view(node, subscripts):
     if type(node) == asg.TensorOp:
         if 'dim_map' in node.attr and 'size_map' in node.attr:
             dim_map = node.attr['dim_map']
             size_map = node.attr['size_map']
-            assert len(dim_map) == len(size_map) and len(size_map) == len(subscripts)
-            cur_dim = None
-            sgroups = []
-            sgroups_dim = []
-            sgroups_size = []
-            for i in range(len(subscripts)):
-                if dim_map[i] != -1:
-                    if dim_map[i] == cur_dim:
-                        sgroups[-1].append(subscripts[i])
-                        sgroups_size[-1].append(size_map[i])
+            assert len(dim_map) == len(subscripts)
+            assert helpers.list_same_size(dim_map, size_map)
+
+            orig_subscripts = dict()
+            for i in range(len(dim_map)):
+                d = dim_map[i]
+                if type(d) in (list, tuple):
+                    t = get_subdims(subscripts[i], d, size_map[i])
+                    for k in t:
+                        if k != -1:
+                            if k in orig_subscripts:
+                                orig_subscripts[k].extend(t[k])
+                            else:
+                                orig_subscripts[k] = t[k]
+                elif d != -1: # remove fake axes
+                    if d in orig_subscripts:
+                        orig_subscripts[d].append((subscripts[i], size_map[i]))
                     else:
-                        cur_dim = dim_map[i]
-                        sgroups.append([subscripts[i]])
-                        sgroups_dim.append(cur_dim)
-                        sgroups_size.append([size_map[i]])
+                        orig_subscripts[d] = [(subscripts[i], size_map[i])]
 
-            orig_subscripts = []
-            for i in range(len(sgroups)):
-                sg = sgroups[i]
+            res_subscripts = []
+            for k in sorted(orig_subscripts.keys()):
+                sg = [tmp[0] for tmp in orig_subscripts[k]]
+                ds = [tmp[1] for tmp in orig_subscripts[k]]
                 orig_s = sg[0]
-                dim = sgroups_dim[i]
-                ds = sgroups_size[i]
 
-                if type(dim) in (list, tuple) and len(dim) > 1:
-                    assert type(orig_s) != ir.Slice, 'orig type error cannot be factored'
-                    assert type(ds[0]) in (list, tuple) and len(ds[0]) == len(dim), 'ds size incorrect'
-                    orig_subscripts.extend(get_subdims(orig_s, ds[0]))
-                else:
-                    for j in range(1, len(sg)):
-                        if type(orig_s) in (ir.Scalar, ir.Literal, ir.Indexing, ir.Ndarray, ir.Expr):
-                            if type(sg[j]) in (ir.Scalar, ir.Literal, ir.Indexing, ir.Ndarray):
-                                orig_s = ir.Expr(ir.Expr(orig_s, ds[j], '*'), sg[j], '+')
-                            elif type(sg[j]) == ir.Slice:
-                                start = ir.Expr(ir.Expr(orig_s, ds[j], '*'), sg[j].start, '+')
-                                stop = ir.Expr(ir.Expr(orig_s, ds[j], '*'), sg[j].stop, '+')
-                                orig_s = ir.Slice(start, stop, sg[j].step)
-                            else:
-                                raise TypeError('idx type error')
-                        elif type(orig_s) == ir.Slice:
-                            if type(sg[j]) in (ir.Scalar, ir.Literal, ir.Indexing, ir.Ndarray):
-                                start = ir.Expr(ir.Expr(orig_s.start, ds[j], '*'), sg[j], '+')
-                                stop = ir.Expr(
-                                    ir.Expr(ir.Expr(ir.Expr(orig_s.stop, 1, '-'), ds[j], '*'), sg[j], '+'), 1,
-                                    '+')
-                                step = ir.Expr(orig_s.step, ds[j], '*')
-                                orig_s = ir.Slice(start, stop, step)
-                            elif type(sg[j]) == ir.Slice:
-                                start = ir.Expr(ir.Expr(orig_s.start, ds[j], '*'), sg[j].start, '+')
-                                stop = ir.Expr(ir.Expr(ir.Expr(orig_s.stop, 1, '-'), ds[j], '*'), sg[j].stop, '+')
-                                assert (orig_s.step == 1 or orig_s.step.val == 1) and (sg[j].step == 1 or sg[
-                                    j].step.val == 1), 'view does not support non-continuous slice of slice'
-                                orig_s = ir.Slice(start, stop, 1)
-                            else:
-                                raise TypeError('idx type error')
+                for j in range(1, len(sg)):
+                    if type(orig_s) in (ir.Scalar, ir.Literal, ir.Indexing, ir.Ndarray, ir.Expr):
+                        if type(orig_subscripts[k][j][0]) in (ir.Scalar, ir.Literal, ir.Indexing, ir.Ndarray):
+                            orig_s = ir.Expr(ir.Expr(orig_s, ds[j], '*'), sg[j], '+')
+                        elif type(sg[j]) == ir.Slice:
+                            start = ir.Expr(ir.Expr(orig_s, ds[j], '*'), sg[j].start, '+')
+                            stop = ir.Expr(ir.Expr(orig_s, ds[j], '*'), sg[j].stop, '+')
+                            orig_s = ir.Slice(start, stop, sg[j].step)
                         else:
-                            raise TypeError('orig type error')
-                    orig_subscripts.append(orig_s)
-
-            return orig_subscripts
-
+                            raise TypeError('idx type error')
+                    elif type(orig_s) == ir.Slice:
+                        if type(sg[j]) in (ir.Scalar, ir.Literal, ir.Indexing, ir.Ndarray):
+                            start = ir.Expr(ir.Expr(orig_s.start, ds[j], '*'), sg[j], '+')
+                            stop = ir.Expr(
+                                ir.Expr(ir.Expr(ir.Expr(orig_s.stop, 1, '-'), ds[j], '*'), sg[j], '+'), 1,
+                                '+')
+                            step = ir.Expr(orig_s.step, ds[j], '*')
+                            orig_s = ir.Slice(start, stop, step)
+                        elif type(sg[j]) == ir.Slice:
+                            start = ir.Expr(ir.Expr(orig_s.start, ds[j], '*'), sg[j].start, '+')
+                            stop = ir.Expr(ir.Expr(ir.Expr(orig_s.stop, 1, '-'), ds[j], '*'), sg[j].stop, '+')
+                            assert (orig_s.step == 1 or orig_s.step.val == 1) and (sg[j].step == 1 or sg[
+                                j].step.val == 1), 'view does not support non-continuous slice of slice'
+                            orig_s = ir.Slice(start, stop, 1)
+                        else:
+                            raise TypeError('idx type error')
+                    else:
+                        raise TypeError('orig type error')
+                res_subscripts.append(orig_s)
+            return res_subscripts
     return subscripts
-
 
 
 def gen_ir(node):
@@ -285,8 +300,8 @@ def gen_ir(node):
                 compute.append(pre_loop)
                 compute = pre_loop.body
 
-            lhs = bind(lhs, resolve_views(node.operators[0], lhs_subscripts))
-            rhs = bind(rhs, resolve_views(node.operators[1], rhs_subscripts))
+            lhs = bind(lhs, resolve_view(node.operators[0], lhs_subscripts))
+            rhs = bind(rhs, resolve_view(node.operators[1], rhs_subscripts))
             res = bind(res, res_subscripts)
             compute.append(ir.Assignment(res, ir.Expr(lhs, rhs, op)))
 
@@ -307,29 +322,32 @@ def gen_ir(node):
             levels = len(size)
             compute = node.compute
 
+            subscripts = []
             for level in range(levels):
-                sl = get_slice(val)
-                attr = {}
-                if sl != None and type(sl.start) == ir.Literal:
-                    if sl.start.val < 0:
-                        ofs = -slice.start.val
-                        attr['slice_ofs'] = ofs
-                    else:
-                        ofs = 0
-                else:
-                    ofs = 0
+                # sl = get_slice(val)
+                # attr = {}
+                # if sl != None and type(sl.start) == ir.Literal:
+                #     if sl.start.val < 0:
+                #         ofs = -sl.start.val
+                #         attr['slice_ofs'] = ofs
+                #     else:
+                #         ofs = 0
+                # else:
+                #     ofs = 0
 
                 pre_loop = ir.Loop(0, size[level], 1, [])
-                if ofs > 0:
-                    pre_loop.attr['loop_ofs'] = ofs
+                # if ofs > 0:
+                #     pre_loop.attr['loop_ofs'] = ofs
 
-                val = bind(val, [pre_loop.iterate], [attr])
+                subscripts.append(pre_loop.iterate)
                 node.input_orders[0].append((level, pre_loop))
-                res = bind(res, [pre_loop.iterate])
                 node.output_order.append((level, pre_loop))
                 pre_loop.attr['output_axis'] = level
                 compute.append(pre_loop)
                 compute = pre_loop.body
+
+            val = bind(val, resolve_view(node.operators[0], subscripts))
+            res = bind(res, subscripts)
 
             compute.append(ir.Assignment(res, ir.Math(val, node.op_type)))
 
@@ -450,13 +468,17 @@ def gen_ir(node):
                 all_loops[i].attr['ptype'] = 'reduction'
 
             op1 = node.operators[0].eval
+            op1_subscripts = []
             for i in input1:
-                op1 = bind(op1, [all_loops[mapping[i]].iterate])
+                op1_subscripts.append(all_loops[mapping[i]].iterate)
+            op1 = bind(op1, resolve_view(node.operators[0], op1_subscripts))
 
             if node.operators[1] != None:
                 op2 = node.operators[1].eval
+                op2_subscripts = []
                 for i in input2:
-                    op2 = bind(op2, [all_loops[mapping[i]].iterate])
+                    op2_subscripts.append(all_loops[mapping[i]].iterate)
+                op2 = bind(op2, resolve_view(node.operators[1], op2_subscripts))
             else:
                 op2 = None
 
@@ -505,7 +527,10 @@ def gen_ir(node):
             node.eval = node.operators[0].eval
             dim_map = []
             size_map = []
-            ref_size1 = helpers.get_ir_of_size(node.operators[0].ref_size)
+            if 'size_map' in node.operators[0].attr:
+                ref_size1 = node.operators[0].attr['size_map']
+            else:
+                ref_size1 = helpers.get_ir_of_size(node.operators[0].ref_size)
             ref_size2 = helpers.get_ir_of_size(node.ref_size)
             for i in range(len(node.operators[1])):
                 s = node.operators[1][i]
@@ -542,7 +567,8 @@ def gen_ir(node):
                 gen_ir(op)
                 subscripts.append(op.eval)
 
-            real_subscripts = resolve_views(node.operators[0], subscripts)
+            real_subscripts = resolve_view(node.operators[0], subscripts)
+            assert len(real_subscripts) == len(node.operators[0].eval.size)
             node.eval = bind(node.operators[0].eval, real_subscripts)
 
             for key in node.operators[0].eval.attr:
