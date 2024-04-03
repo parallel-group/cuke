@@ -210,13 +210,13 @@ def fuse_operators(op1, order1, op2):
 def basic_rule(node, res):
     if type(node) == TensorOp and node.op_type in elementwise_op:
         if type(node.operators[0]) == TensorOp and node.operators[0].op_type in (
-                elementwise_op + ['apply', 'einsum', 'setval']) and len(
+                elementwise_op + ['apply', 'einsum', 'setval', 'view']) and len(
             node.operators[0].ref_by) == 1:
             fuse_operators(node, node.input_orders[0], node.operators[0])
 
         if node.op_type in binary_elw:
             if type(node.operators[1]) == TensorOp and node.operators[1].op_type in (
-                    elementwise_op + ['apply', 'einsum', 'setval']) and len(
+                    elementwise_op + ['apply', 'einsum', 'setval', 'view']) and len(
                 node.operators[1].ref_by) == 1:
                 fuse_operators(node, node.input_orders[1], node.operators[1])
 

@@ -340,6 +340,12 @@ def rebind_iterate(stmt, old, new):
         if type(s) == ir.Indexing and type(s.idx) in (ir.Scalar, ir.Literal):
             if s.idx.dobject_id == old.dobject_id:
                 s.idx = new
+        if type(s) == ir.Expr:
+            if type(s.left) in (ir.Scalar, ir.Literal) and s.left.dobject_id == old.dobject_id:
+                s.left = new
+            if type(s.right) in (ir.Scalar, ir.Literal) and s.right.dobject_id == old.dobject_id:
+                s.right = new
+
         return [True, True, True, True, True]
 
     t = IRTraversal(action)

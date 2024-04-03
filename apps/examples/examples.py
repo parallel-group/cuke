@@ -1,6 +1,7 @@
 import torch
 
 import helpers
+import transform
 from asg import Tensor, Var, apply, Const
 from asg2ir import gen_ir
 import codegen
@@ -1368,6 +1369,20 @@ def view_test11():
 
 
 def neg_transE():
+    class fuser:
+        def __init__(self):
+            self.rules = [transform.fuse.basic_rule]
+
+        def __call__(self, node):
+            def action(n, res):
+                for r in self.rules:
+                    r(n, res)
+
+            t = helpers.ASGTraversal(action)
+            t(node)
+            return node
+
+
     nnodes = Var(name='nnodes')
     nedges = Var(name='nedges')
     dim = Var(name='dim')
@@ -1383,16 +1398,13 @@ def neg_transE():
     vt_view1 = vt.view((16, 64, 64, dim), (0, -1, 0, 1))
     vt_view2 = vt_view1.view((1024, 64, dim), ([0, 1], 2, 3))
     vh = vh.view((1024, 64, dim), (0, -1, 1))
+    vr = vr.view((1024, 64, dim), (0, -1, 1))
 
-    res = vh - vt_view2
+    res = vh - vt_view2 + vr
+    transform.passes = [fuser()]
     code = codegen.cpu.print_cpp(gen_ir(res))
     print(code)
 
-    # print(vt.ref_size)
-    # print(vt_view2.ref_size)
-    # print(vt_view2.eval.size)
-    # print(vt_view2.attr['dim_map'])
-    # print(vt_view2.attr['size_map'])
 
 
 if __name__ == "__main__":
