@@ -1236,7 +1236,7 @@ def view_test3():
     code = codegen.cpu.print_cpp(ir)
     print(code)
 
-    print(tmp1.eval)
+    # print(tmp1.eval)
     print(view2.attr['dim_map'])
     print([s.val for s in view2.attr['size_map']])
 
@@ -1353,6 +1353,48 @@ def view_test10():
     print(tmp1.attr['dim_map'])
     print(tmp1.attr['size_map'])
 
+
+def view_test11():
+    data = Tensor((16, 32))
+    view1 = data.view((2, 8, 8, 4), (0, 0, 1, 1))
+    i = Var(name='i')
+    j = Var(name='j')
+    tmp1 = view1[i, :, :, j]
+    tmp2 = Tensor(tmp1.ref_size)
+    res = tmp1 + tmp2
+    ir = gen_ir(res)
+    code = codegen.cpu.print_cpp(ir)
+    print(code)
+
+
+def neg_transE():
+    nnodes = Var(name='nnodes')
+    nedges = Var(name='nedges')
+    dim = Var(name='dim')
+    Eemb = Tensor((nnodes, dim), name='Eemb')
+    Remb = Tensor((nedges, dim), name='Remb')
+    h = Tensor((1024, ), dtype='int', name='h')
+    t = Tensor((1024, ), dtype='int', name='t')
+    r = Tensor((1024, ), dtype='int', name='r')
+    vh = Eemb[h]
+    vt = Eemb[t]
+    vr = Remb[r]
+
+    vt_view1 = vt.view((64, 16, 64, dim), (-1, 0, 0, 1))
+    vt_view2 = vt_view1.view((1024, 64, dim), ([0, 1], 2, 3))
+    vh = vh.view((1024, 64, dim), (0, -1, 1))
+
+    res = vh - vt_view2
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
+    # print(vt.ref_size)
+    print(vt_view2.ref_size)
+    print(vt_view2.eval.size)
+    print(vt_view2.attr['dim_map'])
+    print(vt_view2.attr['size_map'])
+
+
 if __name__ == "__main__":
     # basic tensor indexing tests
     # test1()
@@ -1431,4 +1473,6 @@ if __name__ == "__main__":
     # view_test7()
     # view_test8()
     # view_test9()
-    view_test10()
+    # view_test10()
+    # view_test11()
+    neg_transE()

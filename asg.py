@@ -9,7 +9,7 @@ arith_op = {'add': '+', 'sub': '-', 'mul': '*', 'floordiv': '/', 'truediv': '/',
 math_op = ['round', 'abs', 'nbits']
 cmp_op = ['bigger', 'smaller']
 func_op = ['apply', 'reduce', 'aggr']
-other_op = ['setval', 'einsum', 'index', 'inline', 'size', 'norm']
+other_op = ['setval', 'einsum', 'index', 'inline', 'size', 'norm', 'view']
 
 binary_elw = list(arith_op.keys()) + cmp_op
 unary_elw = math_op
@@ -297,7 +297,7 @@ class TensorOp(Tensor):
             # view sizes and dims must be int literal or const
             sizes = []
             for s in operators[1]:
-                if type(s) == Const and s.dtype in int_types:
+                if (type(s) == Const and s.dtype in int_types) or helpers.is_int_var(s):
                     sizes.append(s)
                 elif type(s) == int:
                     sizes.append(Const(s, 'int'))

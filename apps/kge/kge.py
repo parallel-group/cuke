@@ -209,7 +209,7 @@ class smem():
 # transform.passes = [fuser(), tiler(16, 128)]
 # transform.passes = [fuser()]
 # transform.passes = [fuser(), tiler(16, 64)]
-transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
+# transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
 
 
 def write_code(code, filename):
@@ -254,9 +254,9 @@ def transE():
     mr = Pemb[r]
 
     res = vh - vt + vr
-    # code = codegen.cpu.print_cpp(gen_ir(res))
-    # print(code)
-    code = codegen.gpu.print_cuda(gen_ir(res))
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+    # code = codegen.gpu.print_cuda(gen_ir(res))
     # print(code)
 
     batchsize=256
@@ -282,6 +282,8 @@ def transE():
     y = eemb[hh] - eemb[tt] + remb[rr]
     x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr, uniq, buf, cnt)
     # print(torch.sum(torch.abs(x) - torch.abs(y)))
+
+
 
 def transH():
     nnodes = Var(name='nnodes')
@@ -675,13 +677,13 @@ def backward_transf():
 
 
 if __name__ == "__main__":
-    # transE() 
+    transE()
     # transH()
     # transR()
     # transF()
     # RESCAL()
     # backward()
-    backward_transr()
+    # backward_transr()
     # backward_rescal()
     # backward_transh()
     # backward_transf()

@@ -118,48 +118,53 @@ def resolve_views(node, subscripts):
                 if dim_map[i] != -1:
                     if dim_map[i] == cur_dim:
                         sgroups[-1].append(subscripts[i])
+                        sgroups_size[-1].append(size_map[i])
                     else:
                         cur_dim = dim_map[i]
                         sgroups.append([subscripts[i]])
                         sgroups_dim.append(cur_dim)
-                        sgroups_size.append(size_map[i])
+                        sgroups_size.append([size_map[i]])
 
             orig_subscripts = []
             for i in range(len(sgroups)):
                 sg = sgroups[i]
                 orig_s = sg[0]
-                for i in range(1, len(sg)):
-                    if type(orig_s) in (ir.Scalar, ir.Literal, ir.Indexing, ir.Ndarray, ir.Expr):
-                        if type(sg[i]) in (ir.Scalar, ir.Literal, ir.Indexing, ir.Ndarray):
-                            orig_s = ir.Expr(ir.Expr(orig_s, size_map[i], '*'), sg[i], '+')
-                        elif type(sg[i]) == ir.Slice:
-                            start = ir.Expr(ir.Expr(orig_s, size_map[i], '*'), sg[i].start, '+')
-                            stop = ir.Expr(ir.Expr(orig_s, size_map[i], '*'), sg[i].stop, '+')
-                            orig_s = ir.Slice(start, stop, sg[i].step)
-                        else:
-                            raise TypeError('idx type error')
-                    elif type(orig_s) == ir.Slice:
-                        if type(sg[i]) in (ir.Scalar, ir.Literal, ir.Indexing, ir.Ndarray):
-                            start = ir.Expr(ir.Expr(orig_s.start, size_map[i], '*'), sg[i], '+')
-                            stop = ir.Expr(ir.Expr(ir.Expr(ir.Expr(orig_s.stop, 1, '-'), size_map[i], '*'), sg[i], '+'), 1, '+')
-                            step = ir.Expr(orig_s.step, size_map[i], '*')
-                            orig_s = ir.Slice(start, stop, step)
-                        elif type(sg[i]) == ir.Slice:
-                            start = ir.Expr(ir.Expr(orig_s.start, size_map[i], '*'), sg[i].start, '+')
-                            stop = ir.Expr(ir.Expr(ir.Expr(orig_s.stop, 1, '-'), size_map[i], '*'), sg[i].stop, '+')
-                            assert (orig_s.step == 1 or orig_s.step.val == 1) and (sg[i].step == 1 or sg[i].step.val == 1), 'view does not support non-continuous slice of slice'
-                            orig_s = ir.Slice(start, stop, 1)
-                        else:
-                            raise TypeError('idx type error')
-                    else:
-                        raise TypeError('orig type error')
-
                 dim = sgroups_dim[i]
                 ds = sgroups_size[i]
+
                 if type(dim) in (list, tuple) and len(dim) > 1:
                     assert type(orig_s) != ir.Slice, 'orig type error cannot be factored'
-                    orig_subscripts.extend(get_subdims(orig_s, ds))
+                    assert type(ds[0]) in (list, tuple) and len(ds[0]) == len(dim), 'ds size incorrect'
+                    orig_subscripts.extend(get_subdims(orig_s, ds[0]))
                 else:
+                    for j in range(1, len(sg)):
+                        if type(orig_s) in (ir.Scalar, ir.Literal, ir.Indexing, ir.Ndarray, ir.Expr):
+                            if type(sg[j]) in (ir.Scalar, ir.Literal, ir.Indexing, ir.Ndarray):
+                                orig_s = ir.Expr(ir.Expr(orig_s, ds[j], '*'), sg[j], '+')
+                            elif type(sg[j]) == ir.Slice:
+                                start = ir.Expr(ir.Expr(orig_s, ds[j], '*'), sg[j].start, '+')
+                                stop = ir.Expr(ir.Expr(orig_s, ds[j], '*'), sg[j].stop, '+')
+                                orig_s = ir.Slice(start, stop, sg[j].step)
+                            else:
+                                raise TypeError('idx type error')
+                        elif type(orig_s) == ir.Slice:
+                            if type(sg[j]) in (ir.Scalar, ir.Literal, ir.Indexing, ir.Ndarray):
+                                start = ir.Expr(ir.Expr(orig_s.start, ds[j], '*'), sg[j], '+')
+                                stop = ir.Expr(
+                                    ir.Expr(ir.Expr(ir.Expr(orig_s.stop, 1, '-'), ds[j], '*'), sg[j], '+'), 1,
+                                    '+')
+                                step = ir.Expr(orig_s.step, ds[j], '*')
+                                orig_s = ir.Slice(start, stop, step)
+                            elif type(sg[j]) == ir.Slice:
+                                start = ir.Expr(ir.Expr(orig_s.start, ds[j], '*'), sg[j].start, '+')
+                                stop = ir.Expr(ir.Expr(ir.Expr(orig_s.stop, 1, '-'), ds[j], '*'), sg[j].stop, '+')
+                                assert (orig_s.step == 1 or orig_s.step.val == 1) and (sg[j].step == 1 or sg[
+                                    j].step.val == 1), 'view does not support non-continuous slice of slice'
+                                orig_s = ir.Slice(start, stop, 1)
+                            else:
+                                raise TypeError('idx type error')
+                        else:
+                            raise TypeError('orig type error')
                     orig_subscripts.append(orig_s)
 
             return orig_subscripts
