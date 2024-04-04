@@ -294,7 +294,6 @@ class TensorOp(Tensor):
 
         elif op_type == 'view':
             dtype = operators[0].dtype
-            # view sizes and dims must be int literal or const
             sizes = []
             for s in operators[1]:
                 if (type(s) == Const and s.dtype in int_types) or helpers.is_int_var(s):
@@ -304,6 +303,7 @@ class TensorOp(Tensor):
                 else:
                     raise TypeError('tensor dimensions must be int or a scalar int variable')
             dims = []
+            # view dims must be int literal or const
             for s in operators[2]:
                 if type(s) == Const and s.dtype in int_types:
                     dims.append(s)
@@ -381,15 +381,20 @@ class TensorOp(Tensor):
         elif op_type == 'apply':
             func = self.operators[0]
             self.nparams = len(inspect.signature(func).parameters)
+
+            # check the axes of the n parameters, an axis must be an int or a int Const
             for i in range(self.nparams):
                 axis = operators[1 + self.nparams + i]
                 if type(axis) == int:
                     self.operators[1 + self.nparams + i] = Const(axis, 'int')
+                else:
+                    assert type(axis) == Const and axis.dtype in int_types, 'invalid axis'
 
             data = []
-            axis_size = self.operators[1]._size()[self.operators[1 + self.nparams].val]
+            # this is the primary axis size, i.e., number of loop iterations
+            axis_size = self.operators[1].ref_size[self.operators[1 + self.nparams].val]
             for i in range(1, 1 + self.nparams):
-                data_size = self.operators[i]._size()
+                data_size = self.operators[i].ref_size
                 axis = self.operators[self.nparams + i].val
                 # every input item should have the same size as the primary axis size
                 assert helpers.has_same_value(axis_size, data_size[axis])
@@ -401,26 +406,31 @@ class TensorOp(Tensor):
                 item.attr['is_arg'] = False
                 data.append(item)
 
+            # call function on an item of the input data
             ret = self.operators[0](*data)
             dtype = ret.dtype
             ret.ref_by.append(self)
+
+            # handle output with offsets
             out_ofs = self.operators[1 + 2 * self.nparams]
             if out_ofs == None:
-                ref_size = [axis_size] + ret._size()
+                ref_size = [axis_size] + ret.ref_size
             else:
-                ref_size = [out_ofs[axis_size]] + ret._size()[1:]
+                ref_size = [out_ofs[axis_size]] + ret.ref_size[1:]
 
             self.operators.extend(data)
             self.operators.append(ret)
 
+            # handle conditional apply
             cond = self.operators[2 + 2 * self.nparams]
             if cond != None:
                 assert helpers.is_1d_tensor(cond)
-                assert helpers.has_same_value(axis_size, cond._size()[0])
-                counter = Var(dtype = self.operators[0]._size()[0].dtype)
+                assert helpers.has_same_value(axis_size, cond.ref_size[0])
+                counter = Var(dtype = self.operators[1].ref_size[0].dtype)
                 counter.attr['is_arg'] = False
                 self.counter = setval(counter, 0)
                 self.operators.append(self.counter)
+                # set dynamic_size attribute for memory allocation optimization
                 ref_size[0].attr['dynamic_size'] = True
             else:
                 self.operators.append(None)

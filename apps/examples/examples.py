@@ -2,7 +2,7 @@ import torch
 
 import helpers
 import transform
-from asg import Tensor, Var, apply, Const
+from asg import Tensor, Var, apply, bigger
 from asg2ir import gen_ir
 import codegen
 import run
@@ -721,15 +721,15 @@ def apply_test6():
 
 
 def apply_test7():
-    A = Tensor('A', (10, 20))
-    B = Tensor('B', (20, ))
+    A = Tensor((10, 20))
+    B = Tensor((20, ))
     res = apply(lambda a, b: a + b, (A, B), (1, 0))
-    code = codegen.cpu.print_cpp(res._gen_ir())
+    code = codegen.cpu.print_cpp(gen_ir(res))
     print(code)
 
 
 def apply_test8():
-    A = Tensor('A', (10, 20))
+    A = Tensor((10, 20))
     ofs = A.apply(lambda a: a.size()).prefix_sum(inclusive=False)
     res = apply(lambda a: a + 1, (A, ), out_ofs=ofs)
     code = codegen.cpu.print_cpp(res._gen_ir())
@@ -767,16 +767,16 @@ def apply_test10():
 
 
 def apply_test11():
-    A = Tensor('A', (10, ))
+    A = Tensor((10, ))
     res = A[:5].apply(lambda x:x)
-    code = codegen.cpu.print_cpp(res._gen_ir())
+    code = codegen.cpu.print_cpp(gen_ir(res))
     print(code)
 
 def cond_apply_test1():
-    d1 = Var('d1')
-    d2 = Var('d2')
-    A = Tensor('A', (d1, d2))
-    B = Tensor('B', (d1,))
+    d1 = Var(name='d1')
+    d2 = Var(name='d2')
+    A = Tensor((d1, d2))
+    B = Tensor((d1,))
     ast = A.apply(lambda x: x + 1, cond=B)
     ir = gen_ir(ast)
 
@@ -785,10 +785,10 @@ def cond_apply_test1():
 
 
 def cond_apply_test2():
-    d1 = Var('d1')
-    d2 = Var('d2')
-    A = Tensor('A', (d1, d2))
-    B = Tensor('B', (d2,))
+    d1 = Var(name='d1')
+    d2 = Var(name='d2')
+    A = Tensor((d1, d2))
+    B = Tensor((d2,))
     ast = A.apply(lambda x: x + 1, axis=1, cond=B)
     ir = gen_ir(ast)
 
@@ -797,15 +797,47 @@ def cond_apply_test2():
 
 
 def cond_apply_test3():
-    d1 = Var('d1')
-    d2 = Var('d2')
-    A = Tensor('A', (d1, d2))
-    B = Tensor('B', (d1,))
-    C = Tensor('C', (d1,))
+    d1 = Var(name='d1')
+    d2 = Var(name='d2')
+    A = Tensor((d1, d2))
+    B = Tensor((d1,))
+    C = Tensor((d1,))
     cond = bigger(B + C.abs(), 0)
     ast = A.apply(lambda x: x + 1, cond=cond)
-    code = codegen.cpu.print_cpp(ast._gen_ir())
+    code = codegen.cpu.print_cpp(gen_ir(ast))
     print(code)
+
+
+def view_apply_test1():
+    A = Tensor((200, ))
+    B = Tensor((10, 20))
+    res = apply(lambda a, b: a + b, (A.view((10, 20), (0, 0)), B))
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
+def view_apply_test2():
+    A = Tensor((200, ))
+    B = Tensor((10, 20))
+    res = apply(lambda a, b: a + b, (A, B.view((200, ), ([0, 1], ))))
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
+
+
+def view_apply_test3():
+    A = Tensor((200, ))
+    B = Tensor((20, ))
+    res = apply(lambda a, b: a + b, (A.view((10, 20), (0, 0)), B), (1, 0))
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
+def view_apply_test4():
+    A = Tensor((200, ))
+    B = Tensor((10, 20))
+    res = apply(lambda a, b: a + b, (A.view((4, 10, 20), (-1, 0, 0)), B.view((4, 10, 20), (-1, 0, 1))))
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
 
 def test_aggr1():
     A = Tensor('A', (10, 20))
@@ -1368,6 +1400,7 @@ def view_test11():
     print(code)
 
 
+
 def neg_transE():
     class fuser:
         def __init__(self):
@@ -1409,11 +1442,11 @@ def neg_transE():
 
 if __name__ == "__main__":
     # basic tensor indexing tests
-    # test1()
-    # test2()
-    # test3()
-    # test4()
-    # test5()
+    # test1() # pass
+    # test2() # pass
+    # test3() # pass
+    # test4() # pass
+    # test5() # pass
     # test6()
     # test7()
     # test8()
@@ -1442,20 +1475,27 @@ if __name__ == "__main__":
     # compression()
     # test_math1()
     # test_math2()
-    # apply_test1()
-    # apply_test2()
-    # apply_test3()
-    # apply_test4()
-    # apply_test5()
-    # apply_test6()
-    # apply_test7()
+    # apply_test1() # pass
+    # apply_test2() # pass
+    # apply_test3() # pass
+    # apply_test4() # pass
+    # apply_test5() # pass
+    # apply_test6() # pass
+    # apply_test7()  # pass
     # apply_test8()
     # apply_test9()
     # apply_test10()
-    # apply_test11()
-    # cond_apply_test1()
-    # cond_apply_test2()
-    # cond_apply_test3()
+    # apply_test11() # pass
+    # cond_apply_test1() # pass
+    # cond_apply_test2() # pass
+    # cond_apply_test3() # pass
+
+    # view_apply_test1() # pass
+    # view_apply_test2() # pass
+    # view_apply_test3() # pass
+    view_apply_test4() # pass
+
+
     # reduce_test1()
     # reduce_test2()
     # reduce_test3()
@@ -1487,4 +1527,4 @@ if __name__ == "__main__":
     # view_test9()
     # view_test10()
     # view_test11()
-    neg_transE()
+    # neg_transE()

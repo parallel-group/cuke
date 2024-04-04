@@ -600,19 +600,22 @@ def gen_ir(node):
 
         elif node.op_type == 'apply':
 
-            # operators: func, data (node.nparams), axis (node.nparams), out_ofs, cond, items (node.nparams), ret
+            # operators: func, data (node.nparams), axis (node.nparams), out_ofs, cond, items (node.nparams), ret, counter
+
+            # evaluate data, axis, out_ofs, cond
             for i in range(1, 3 + 2 * node.nparams):
                 if node.operators[i] != None:
                     gen_ir(node.operators[i])
 
             primary_axis = node.operators[1 + node.nparams].eval.val
+            sizes =  helpers.get_ir_of_size(node.operators[1].ref_size)
 
             # this is the loop that iterates over the axis of the primary (first) tensor input
             cond = node.operators[2 + 2 * node.nparams]
             if cond == None:
-                outer_loop = ir.Loop(0, node.operators[1].eval.size[primary_axis], 1, [])
+                outer_loop = ir.Loop(0, sizes[primary_axis], 1, [])
             else:
-                outer_loop = ir.FilterLoop(0, node.operators[1].eval.size[primary_axis], 1,
+                outer_loop = ir.FilterLoop(0, sizes[primary_axis], 1,
                                         cond.eval, [], [])
                 # gen ir for the counter
                 gen_ir(node.operators[-1])
@@ -620,17 +623,31 @@ def gen_ir(node):
 
             nn = []
             for i in range(node.nparams):
-                item = node.operators[3 + 2 * node.nparams + i]
-                item.eval = node.operators[1 + i].eval
+                data = node.operators[1 + i]
                 axis = node.operators[1 + node.nparams + i].eval.val
-                n = num_unbind(item.eval)
+
+                # number of unbind axes in the eval of input data
+                n = num_unbind(data.eval)
                 nn.append(n)
-                for i in range(n, axis):
-                    item.eval = ir.Indexing(item.eval, ir.Literal(-1, 'int'))
-                if axis >= n:
-                    item.eval = ir.Indexing(item.eval, outer_loop.iterate)
-                else:
-                    item.eval = bind(item.eval, [outer_loop.iterate])
+
+                subscripts = []
+
+                for j in range(axis):
+                    op = asg.Const(slice(0, data.ref_size[j], 1), 'slice')
+                    gen_ir(op)
+                    subscripts.append(op.eval)
+
+                subscripts.append(outer_loop.iterate)
+
+                for j in range(axis+1, len(data.ref_size)):
+                    op = asg.Const(slice(0, data.ref_size[j], 1), 'slice')
+                    gen_ir(op)
+                    subscripts.append(op.eval)
+
+                real_subscripts = resolve_view(data, subscripts)
+
+                node.operators[3 + 2 * node.nparams + i].eval = bind(data.eval, real_subscripts)
+
 
             # since input items of func has been generated and indexed, we can generate the IR of the func
             ret = node.operators[-2]
@@ -640,6 +657,9 @@ def gen_ir(node):
             for i in range(min(len(ret.input_orders), node.nparams)):
                 n = nn[i]
                 l = node.input_orders[1 + i]
+                axis = node.operators[1 + node.nparams + i].eval.val
+                # TODO: (Yihua) I don't remember how this is implemented, Yihua can you add some comments to explain it?
+                # TODO: input orders may need update for views
                 if axis >= n:
                     for j in range(axis):
                         l.append((len(l), ret.input_orders[i][j][1]))
@@ -654,7 +674,7 @@ def gen_ir(node):
             def action(n, res):
                 if isinstance(n, asg.Tensor) and not 'scope' in n.attr:
                     res.extend(n.compute)
-                    if True:#helpers.depend_on_item(n, outer_loop.iterate): # TODO: check if n depends on items, if not we don't need to put it in the loop body
+                    if True:#helpers.depend_on_item(n, outer_loop.iterate): # TODO: (Yihua) check if n depends on items, if not we don't need to put it in the loop body
                         for nn in n.compute:
                             nn.attr['parent_loop'] = outer_loop
                         outer_loop.body.append(n.compute)
@@ -663,7 +683,7 @@ def gen_ir(node):
             t = helpers.ASGTraversal(action)
             ret_compute = t(ret)
 
-            size = helpers.get_ir_of_size(node._size())
+            size = helpers.get_ir_of_size(node.ref_size)
             node.eval = ir.Ndarray(ret.eval.dtype, size)
             node.decl.append(ir.Decl(node.eval))
 
@@ -705,8 +725,16 @@ def gen_ir(node):
                     l = l.body[-1]
                 helpers.rebind_iterate(l.lhs, outer_loop.iterate, counter)
                 node.attr['eval'] = node.eval
-                node.eval = bind(node.eval, [ir.Slice(ir.Literal(0, counter.dtype), counter, ir.Literal(1, counter.dtype))])
+
+                subscripts = [ir.Slice(ir.Literal(0, counter.dtype), counter, ir.Literal(1, counter.dtype))]
+                for i in range(1, len(node.ref_size)):
+                    op = asg.Const(slice(0, node.ref_size[i], 1), 'slice')
+                    gen_ir(op)
+                    subscripts.append(op.eval)
+                node.eval = bind(node.eval, subscripts)
+
                 node.attr['is_set'] = True
+            # TODO: (Yihua) I don't remember how this is implemented. What is 'is_set' used for? Yihua can you add some comments to explain it.
             elif 'is_set' in node.operators[1].attr:
                 size[primary_axis] = node.operators[1].eval.size[primary_axis]
                 node.attr['is_set'] = True
