@@ -649,7 +649,6 @@ def gen_ir(node):
                 item = node.operators[3 + 2 * node.nparams + i]
                 item.eval = bind(data.eval, real_subscripts)
 
-
                 if 'dim_map' in data.attr and 'size_map' in data.attr:
                     dim_map = [data.attr['dim_map'][i] for i in range(len(subscripts)) if
                                type(subscripts[i]) == ir.Slice]
@@ -676,7 +675,7 @@ def gen_ir(node):
                                 item.attr['dim_map'].append(tmp[d])
                                 item.attr['size_map'].append(size_map[i])
 
-                # since input items of func has been generated and indexed, we can generate the IR of the func
+            # since input items of func has been generated and indexed, we can generate the IR of the func
             ret = node.operators[-2]
             gen_ir(ret)
 
@@ -911,6 +910,7 @@ def gen_ir(node):
             node.decl = [ir.Decl(node.eval)]
             node.compute = [ir.Assignment(node.eval, node.operators[0].eval.size[axis])]
 
+        # TODO: (Lihan) what does this do? what is the storage attribute?
         node.eval.attr['storage'] = []
 
 
