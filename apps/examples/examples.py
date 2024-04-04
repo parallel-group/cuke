@@ -1490,9 +1490,9 @@ if __name__ == "__main__":
     # cond_apply_test2() # pass
     # cond_apply_test3() # pass
 
-    # view_apply_test1() # pass
-    # view_apply_test2() # pass
-    # view_apply_test3() # pass
+    view_apply_test1() # pass
+    view_apply_test2() # pass
+    view_apply_test3() # pass
     view_apply_test4() # pass
 
 

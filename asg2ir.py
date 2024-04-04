@@ -125,7 +125,7 @@ def get_subdims(x, dims, sizes):
     return res
 
 def resolve_view(node, subscripts):
-    if type(node) == asg.TensorOp:
+    if isinstance(node, asg.Tensor):
         if 'dim_map' in node.attr and 'size_map' in node.attr:
             dim_map = node.attr['dim_map']
             size_map = node.attr['size_map']
@@ -649,7 +649,33 @@ def gen_ir(node):
                 node.operators[3 + 2 * node.nparams + i].eval = bind(data.eval, real_subscripts)
 
 
-            # since input items of func has been generated and indexed, we can generate the IR of the func
+                if 'dim_map' in data.attr and 'size_map' in data.attr:
+                    dim_map = [data.attr['dim_map'][i] for i in range(len(subscripts)) if
+                               type(subscripts[i]) == ir.Slice]
+                    size_map = [data.attr['size_map'][i] for i in range(len(subscripts)) if
+                                type(subscripts[i]) == ir.Slice]
+                    item = node.operators[3 + 2 * node.nparams + i]
+                    tmp = list(range(len(real_subscripts)))
+                    j = 0
+                    for i in range(len(real_subscripts)):
+                        if type(real_subscripts[i]) == ir.Slice:
+                            tmp[i] = j
+                            j += 1
+                        else:
+                            tmp[i] = None
+                    item.attr['dim_map'] = []
+                    item.attr['size_map'] = []
+                    for i in range(len(dim_map)):
+                        d = dim_map[i]
+                        if d == -1:
+                            item.attr['dim_map'].append(-1)
+                            item.attr['size_map'].append(size_map[i])
+                        else:
+                            if tmp[d] is not None:
+                                item.attr['dim_map'].append(tmp[d])
+                                item.attr['size_map'].append(size_map[i])
+
+                # since input items of func has been generated and indexed, we can generate the IR of the func
             ret = node.operators[-2]
             gen_ir(ret)
 
