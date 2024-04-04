@@ -646,7 +646,8 @@ def gen_ir(node):
 
                 real_subscripts = resolve_view(data, subscripts)
 
-                node.operators[3 + 2 * node.nparams + i].eval = bind(data.eval, real_subscripts)
+                item = node.operators[3 + 2 * node.nparams + i]
+                item.eval = bind(data.eval, real_subscripts)
 
 
                 if 'dim_map' in data.attr and 'size_map' in data.attr:
