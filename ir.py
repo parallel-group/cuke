@@ -111,8 +111,10 @@ class Ndarray(DObject):
 
 class Math(IR):
     def __init__(self, val, type):
+        super().__init__()
         self.val = val
         self.type = type
+        self.size = val.size
 
 
 class Indexing(DObject):

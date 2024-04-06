@@ -46,11 +46,32 @@ def apply(func, data: (list, tuple), axes=None, out_ofs=None, cond=None):
     return TensorOp('apply', func, *data, *axes, out_ofs, cond)
 
 
-def setval(res, val):
-    return TensorOp('setval', res, val)
+def setval(val, name=''):
+    if isinstance(val, Tensor):
+        if len(val.ref_size) > 0:
+            if name == '':
+                res = Tensor(val.ref_size, dtype=val.dtype)
+            else:
+                res = Tensor(val.ref_size, name=name, dtype=val.dtype)
+        else:
+            if name == '':
+                res = Var(dtype=val.dtype)
+            else:
+                res = Var(name=name, dtype=val.dtype)
+    else:
+        if type(val) == int:
+            if name == '':
+                res = Var(dtype='int')
+            else:
+                res = Var(name=name, dtype='int')
+        elif type(val) == float:
+            if name == '':
+                res = Var(dtype='float')
+            else:
+                res = Var(name=name, dtype='float')
 
-def copy(left, right):
-    left = setval(left, right)
+    res.attr['is_arg'] = False
+    return TensorOp('setval', res, val)
 
 def inline(src, output=[], inputs=[]):
     return TensorOp('inline', src, len(output), *[*output, *inputs])
@@ -91,17 +112,32 @@ class Tensor(ASTNode):
     def __sub__(self, other):
         return TensorOp('sub', self, other)
 
+    def __rsub__(self, other):
+        return self.__sub__(other)
+
     def __add__(self, other):
         return TensorOp('add', self, other)
+
+    def __radd__(self, other):
+        return self.__add__(other)
 
     def __mul__(self, other):
         return TensorOp('mul', self, other)
 
+    def __rmul__(self, other):
+        return self.__mul__(other)
+
     def __truediv__(self, other):
         return TensorOp('truediv', self, other)
 
+    def __rtruediv__(self, other):
+        return self.__truediv__(other)
+
     def __floordiv__(self, other):
         return TensorOp('floordiv', self, other)
+
+    def __rfloordiv__(self, other):
+        return self.__floordiv__(other)
 
     def __matmul__(self, other):
         return TensorOp('einsum', self, other, 'ij,jk->ik')
@@ -133,12 +169,12 @@ class Tensor(ASTNode):
 
     def max(self, axis=0):
         func = lambda x, y: bigger(x, y)
-        init = lambda x: setval(x, MIN_INT)
+        init = lambda: setval(MIN_INT)
         return self.reduce(func, init, axis)
 
     def min(self, axis=0):
         func = lambda x, y: smaller(x, y)
-        init = lambda x: setval(x, MAX_INT)
+        init = lambda: setval(MAX_INT)
         return self.reduce(func, init, axis)
 
     def aggr(self, func, init, indices, axis=0, size=None):
@@ -150,17 +186,17 @@ class Tensor(ASTNode):
 
     def aggr_sum(self, indices, axis=0, size=None):
         func = lambda x, y: x + y
-        init = lambda x: setval(x, 0)
+        init = lambda: setval(0)
         return self.aggr(func, init, indices, axis, size)
 
     def aggr_max(self, indices, axis=0, size=None):
         func = lambda x, y: bigger(x, y)
-        init = lambda x: setval(x, MIN_INT)
+        init = lambda: setval(MIN_INT)
         return self.aggr(func, init, indices, axis, size)
 
     def aggr_min(self, indices, axis=0, size=None):
         func = lambda x, y: smaller(x, y)
-        init = lambda x: setval(x, MAX_INT)
+        init = lambda: setval(MAX_INT)
         return self.aggr(func, init, indices, axis, size)
 
     def prefix_sum(self, axis=0, inclusive=True):
@@ -170,7 +206,7 @@ class Tensor(ASTNode):
         data = self
         if not inclusive:
             size[axis] = size[axis] + 1
-        out = res = Tensor(size, dtype=self.dtype)
+        # out = res = Tensor(size, dtype=self.dtype)
 
         idx = []
         for i in range(axis):
@@ -179,9 +215,9 @@ class Tensor(ASTNode):
             res = res[:]
 
         if inclusive:
-            return setval(out, data[:] + res[-1:size[axis] - 1])
+            return setval(data[:] + res[-1:size[axis] - 1])
         else:
-            return setval(out, data[-1:data._size()[axis]] + res[-1:size[axis] - 1])
+            return setval(data[-1:data._size()[axis]] + res[-1:size[axis] - 1])
 
     def _size(self):
         return self.ref_size
@@ -426,9 +462,7 @@ class TensorOp(Tensor):
             if cond != None:
                 assert helpers.is_1d_tensor(cond)
                 assert helpers.has_same_value(axis_size, cond.ref_size[0])
-                counter = Var(dtype = self.operators[1].ref_size[0].dtype)
-                counter.attr['is_arg'] = False
-                self.counter = setval(counter, 0)
+                self.counter = setval(0)
                 self.operators.append(self.counter)
                 # set dynamic_size attribute for memory allocation optimization
                 ref_size[0].attr['dynamic_size'] = True
