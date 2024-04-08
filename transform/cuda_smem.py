@@ -9,7 +9,10 @@ import copy
 
 def _same_object(a, b):
     if isinstance(a, DObject) and isinstance(b, DObject):
-        return get_obj(a).dobject_id == get_obj(b).dobject_id
+        a = get_obj(a)
+        b = get_obj(b)
+        if hasattr(a, 'dobject_id') and hasattr(b, 'dobject_id'):
+            return get_obj(a).dobject_id == get_obj(b).dobject_id
     return False
 
 def _replace_all_ref(stmt, old, new, attr=''):
@@ -223,7 +226,7 @@ def add_direct_cache(node, eval):
                 
                 def _is_val_in_loopbody(loop, old):
                     def action(s, res):
-                        if _same_object(s, old):
+                        if not isinstance(s, Slice) and _same_object(s, old):
                             res.append(True)
                         return [True, True, True, True, True]
                     return IRTraversal(action)(loop)
@@ -330,7 +333,7 @@ def _is_in_loopbody(loop, body, index):
             return True
     return False
 
-def add_indirect_cache(node, eval, C, D, *args):
+def add_indirect_cache(node, n, C, D, *args):
     eval_list = []
     for tensor in args:
         gen_ir(tensor)
@@ -339,7 +342,7 @@ def add_indirect_cache(node, eval, C, D, *args):
     scope = flatten(node.compute)
 
     def get_indirect_access(s, res):
-        if isinstance(s, (Indexing)) and _same_indirect_access(eval, s):
+        if isinstance(s, (Indexing)) and _same_indirect_access(n.eval, s):
             res.append(s)
             return [False, False, False, False, False]
         return [True, True, True, True, True]
@@ -356,16 +359,31 @@ def add_indirect_cache(node, eval, C, D, *args):
         t = IRTraversal(action)(loop)
         return t[0]
 
+    def _get_idx(indexing):
+        def action(s, res):
+            if isinstance(s, Scalar) and 'loop' in s.attr:
+                res.append(s)
+            return [True, True, True, True, True]
+        t = IRTraversal(action)(indexing)
+        return t
+
     for inacc in inacc_list:
         indices = []
         temp = inacc
+        # while isinstance(temp, Indexing):
+        #     # if isinstance(temp.idx, Indexing):
+        #     #     break
+        #     if 'loop' in temp.idx.attr and 'parent_loop' in temp.idx.attr['loop'].attr:
+        #         indices.append(temp.idx)
+        #     temp = temp.dobject
+        indices = _get_idx(temp)
+        indices = indices[1:]
         while isinstance(temp, Indexing):
-            if isinstance(temp.idx, Indexing):
+            if isinstance(temp.idx, Indexing) and not isinstance(temp.idx.dobject, Slice):
                 break
-            if 'parent_loop' in temp.idx.attr['loop'].attr:
-                indices.append(temp.idx)
+            # if 'loop' in temp.idx.attr and 'parent_loop' in temp.idx.attr['loop'].attr:
+            #     indices.append(temp.idx)
             temp = temp.dobject
-        
         cur_loop = _get_loop_pos(scope, temp)
         
         # cur_loop = indices[-1].attr['loop']
@@ -379,8 +397,8 @@ def add_indirect_cache(node, eval, C, D, *args):
         buf_idx.idx = ThreadIdy()
         outer_loop = None
 
-        if len(eval.size) == 3:
-            smem = Ndarray(eval.dtype, [2, D, D])
+        if len(n.eval.size) == 3:
+            smem = Ndarray(n.eval.dtype, [2, D, D])
             smem.attr['mem_layer'] = 'smem'
             node.decl.append(Decl(smem))
             
@@ -390,7 +408,7 @@ def add_indirect_cache(node, eval, C, D, *args):
             col_loop = Loop(ThreadIdx(), D, BlockDimx(), [])
             outer_loop.body.append(row_loop)
             row_loop.body.append(col_loop)
-            global_var = Indexing(eval.dobject, Literal(-1, 'int'))
+            global_var = Indexing(n.operators[0].eval, Literal(-1, 'int'))
             global_var.idx = Indexing(Indexing(uniq, Literal(-1, 'int')), outer_loop.iterate)
             global_var.idx.dobject.idx = BlockIdx()
             global_var = Indexing(global_var, Expr(row_loop.iterate, indices[1].attr['loop'].attr['parent_loop'].iterate, '+'))
@@ -421,11 +439,11 @@ def add_indirect_cache(node, eval, C, D, *args):
             load_smem = Indexing(smem, buf_idx)
             load_smem = Indexing(load_smem, Expr(indices[1], indices[1].attr['loop'].attr['parent_loop'].iterate, '-'))
             load_smem = Indexing(load_smem, Expr(indices[0], indices[0].attr['loop'].attr['parent_loop'].iterate, '-'))
-            new_rhs = Indexing(eval.dobject, Expr(buf_idx, C, '-'))
+            new_rhs = Indexing(n.operators[0].eval, Expr(buf_idx, C, '-'))
             new_rhs = Indexing(new_rhs, indices[1])
             new_rhs = Indexing(new_rhs, indices[0])
 
-            res = Scalar(eval.dtype)
+            res = Scalar(n.eval.dtype)
             res_assign = Assignment(res, Expr(Expr(buf_idx, C, '<'), load_smem, 'ternary', new_rhs))
 
             cur_loop.body.insert(0, res_assign)
@@ -438,8 +456,8 @@ def add_indirect_cache(node, eval, C, D, *args):
             node.decl.append(Decl(res))
             # node.decl.append(Decl(row_off))
             
-        elif len(eval.size) == 2:
-            smem = Ndarray(eval.dtype, [2, D])
+        elif len(n.eval.size) == 2:
+            smem = Ndarray(n.eval.dtype, [2, D])
             smem.attr['mem_layer'] = 'smem'
             node.decl.append(Decl(smem))
 
@@ -448,7 +466,7 @@ def add_indirect_cache(node, eval, C, D, *args):
             cnt_access.idx = BlockIdx()
             outer_loop = Loop(Expr(ThreadIdx(), Expr(ThreadIdy(), BlockDimx(), '*'), '+'), Expr(cnt_access, D, '*'), Expr(BlockDimx(), BlockDimy(), '*'), [])
             
-            global_var = Indexing(eval.dobject, Literal(-1, 'int'))
+            global_var = Indexing(n.operators[0].eval, Literal(-1, 'int'))
             global_var.idx = Indexing(Indexing(uniq, Literal(-1, 'int')), Expr(outer_loop.iterate, D, '/'))
             global_var.idx.dobject.idx = BlockIdx()
             global_var = Indexing(global_var, Expr(Expr(outer_loop.iterate, D, '%'), indices[0].attr['loop'].attr['parent_loop'].iterate, '+'))
@@ -471,10 +489,10 @@ def add_indirect_cache(node, eval, C, D, *args):
             
             load_smem = Indexing(smem, buf_idx)
             load_smem = Indexing(load_smem, Expr(indices[0], indices[0].attr['loop'].attr['parent_loop'].iterate, '-'))
-            new_rhs = Indexing(eval.dobject, Expr(buf_idx, C, '-'))
+            new_rhs = Indexing(n.operators[0].eval, Expr(buf_idx, C, '-'))
             new_rhs = Indexing(new_rhs, indices[0])
 
-            res = Scalar(eval.dtype)
+            res = Scalar(n.eval.dtype)
             res_assign = Assignment(res, Expr(Expr(buf_idx, C, '<'), load_smem, 'ternary', new_rhs))
             
             cur_loop.body.insert(0, res_assign)
