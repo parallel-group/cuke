@@ -108,19 +108,20 @@ def get_subdims(x, dims, sizes):
         d = dims[len(sizes) - 1 - i]
         s = sizes[len(sizes) - 1 - i]
         if not type(d) in (tuple, list):
-            if d not in res:
-                res[d] = [(ir.Expr(y, s, '%'), s)]
-            else:
-                res[d].append((ir.Expr(y, s, '%'), s))
+            if d != -1:
+                if d not in res:
+                    res[d] = [(ir.Expr(y, s, '%') if i < len(sizes) - 1 else y, s)]
+                else:
+                    res[d].insert(0, (ir.Expr(y, s, '%') if i < len(sizes) - 1 else y, s))
         else:
             ts = list_product(s)
-            sd = get_subdims(ir.Expr(y, ts, '%'), d, s)
+            sd = get_subdims(ir.Expr(y, ts, '%') if i < len(sizes) - 1 else y, d, s)
             for k in sd:
                 if k not in res:
                     res[k] = sd[k]
                 else:
-                    res[k].extend(sd[k])
-        y = ir.Expr(x, s, '/')
+                    res[k][0:0] = sd[k]
+        y = ir.Expr(y, s, '/')
 
     return res
 

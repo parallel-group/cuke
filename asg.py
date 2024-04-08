@@ -46,29 +46,38 @@ def apply(func, data: (list, tuple), axes=None, out_ofs=None, cond=None):
     return TensorOp('apply', func, *data, *axes, out_ofs, cond)
 
 
-def setval(val, name=''):
+def setval(val, name='', dest=None):
     if isinstance(val, Tensor):
-        if len(val.ref_size) > 0:
-            if name == '':
-                res = Tensor(val.ref_size, dtype=val.dtype)
+        if dest == None:
+            if len(val.ref_size) > 0:
+                if name == '':
+                    res = Tensor(val.ref_size, dtype=val.dtype)
+                else:
+                    res = Tensor(val.ref_size, name=name, dtype=val.dtype)
             else:
-                res = Tensor(val.ref_size, name=name, dtype=val.dtype)
+                if name == '':
+                    res = Var(dtype=val.dtype)
+                else:
+                    res = Var(name=name, dtype=val.dtype)
         else:
-            if name == '':
-                res = Var(dtype=val.dtype)
-            else:
-                res = Var(name=name, dtype=val.dtype)
+            res = dest
     else:
         if type(val) == int:
-            if name == '':
-                res = Var(dtype='int')
+            if dest == None:
+                if name == '':
+                    res = Var(dtype='int')
+                else:
+                    res = Var(name=name, dtype='int')
             else:
-                res = Var(name=name, dtype='int')
+                res = dest
         elif type(val) == float:
-            if name == '':
-                res = Var(dtype='float')
+            if dest == None:
+                if name == '':
+                    res = Var(dtype='float')
+                else:
+                    res = Var(name=name, dtype='float')
             else:
-                res = Var(name=name, dtype='float')
+                res = dest
 
     res.attr['is_arg'] = False
     return TensorOp('setval', res, val)
@@ -200,24 +209,30 @@ class Tensor(ASTNode):
         return self.aggr(func, init, indices, axis, size)
 
     def prefix_sum(self, axis=0, inclusive=True):
-        assert type(axis) == int
-        size = self._size()
-        assert len(size) > 0
-        data = self
-        if not inclusive:
-            size[axis] = size[axis] + 1
-        # out = res = Tensor(size, dtype=self.dtype)
+        assert type(axis) == int or (type(axis) == Const and axis.dtype in int_types), 'axis must be an integer or a Const'
+        if type(axis) == Const:
+            axis = axis.val
 
-        idx = []
+        assert len(self.ref_size) > 0, 'input must have at least one dimension'
+        data = self
+        size = []
+        if not inclusive:
+            size[0] = self.ref_size[axis] + 1
+
+        for i in range(len(self.ref_size)):
+            if axis != i:
+                size.append(self.ref_size[i])
+
+        res = Tensor(size, dtype=self.dtype)
+
         for i in range(axis):
-            idx.append()
             data = data[:]
             res = res[:]
 
         if inclusive:
-            return setval(data[:] + res[-1:size[axis] - 1])
+            return setval(data[:] + res[-1:size[axis] - 1], dest=res)
         else:
-            return setval(data[-1:data._size()[axis]] + res[-1:size[axis] - 1])
+            return setval(data[-1:data._size()[axis]] + res[-1:size[axis] - 1], dest=res)
 
     def _size(self):
         return self.ref_size
