@@ -911,6 +911,7 @@ def gen_ir(node):
             node.compute = [ir.Assignment(node.eval, node.operators[0].eval.size[axis])]
 
         # TODO: (Lihan) what does this do? what is the storage attribute?
+        # storage attr stores all the other representations of current node.eval, it is used in parallelize.py
         node.eval.attr['storage'] = []
 
 

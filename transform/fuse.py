@@ -105,6 +105,17 @@ def iterate_of_same_loops(x1, x2):
         return match_orders([(0, x1.attr['loop'])], [(0, x2.attr['loop'])])
     return False
 
+def same_expr_and_scalar(x1, x2):
+    l1 = x1
+    l2 = x2
+    if isinstance(x1, Expr):
+        if isinstance(x1.right, Literal) and x1.right.val == 0:
+            l1 = x1.left
+    if isinstance(x2, Expr):
+        if isinstance(x2.right, Literal) and x2.right.val == 0:
+            l2 = x2.left
+    return same_object(l1,l2)
+
 def match_orders(order1, order2):
     if len(order1) == len(order2):
         for i in range(len(order1)):
@@ -114,11 +125,11 @@ def match_orders(order1, order2):
             x2 = get_val(order2[i][1].start)
             y2 = get_val(order2[i][1].end)
             z2 = get_val(order2[i][1].step)
-            if x1 == None or not (x1 == x2 or same_object(x1, x2) or iterate_of_same_loops(x1, x2)):
+            if x1 == None or not (x1 == x2 or same_object(x1, x2) or iterate_of_same_loops(x1, x2) or same_expr_and_scalar(x1, x2)):
                 return False
-            if y1 == None or not (y1 == y2 or same_object(y1, y2) or iterate_of_same_loops(y1, y2)):
+            if y1 == None or not (y1 == y2 or same_object(y1, y2) or iterate_of_same_loops(y1, y2) or same_expr_and_scalar(y1, y2)):
                 return False
-            if z1 == None and not (z1 == z2 or same_object(z1, z2) or iterate_of_same_loops(z1, z2)):
+            if z1 == None and not (z1 == z2 or same_object(z1, z2) or iterate_of_same_loops(z1, z2) or same_expr_and_scalar(z1, z2)):
                 return False
         return True
     else:
