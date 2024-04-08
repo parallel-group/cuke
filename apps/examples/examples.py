@@ -2,7 +2,7 @@ import torch
 
 import helpers
 import transform
-from asg import Tensor, Var, apply, bigger
+from asg import Tensor, Var, apply, bigger, setval, einsum
 from asg2ir import gen_ir
 import codegen
 import run
@@ -1419,25 +1419,86 @@ def neg_transE():
     nnodes = Var(name='nnodes')
     nedges = Var(name='nedges')
     dim = Var(name='dim')
+    batchsize = Var(name='batchsize')
+    blocksize = Var(name='blocksize')
+
     Eemb = Tensor((nnodes, dim), name='Eemb')
     Remb = Tensor((nedges, dim), name='Remb')
-    h = Tensor((1024, ), dtype='int', name='h')
-    t = Tensor((1024, ), dtype='int', name='t')
-    r = Tensor((1024, ), dtype='int', name='r')
+    h = Tensor((batchsize, ), dtype='int', name='h')
+    t = Tensor((batchsize, ), dtype='int', name='t')
+    r = Tensor((batchsize, ), dtype='int', name='r')
     vh = Eemb[h]
     vt = Eemb[t]
     vr = Remb[r]
 
-    vt_view1 = vt.view((16, 64, 64, dim), (0, -1, 0, 1))
-    vt_view2 = vt_view1.view((1024, 64, dim), ([0, 1], 2, 3))
-    vh = vh.view((1024, 64, dim), (0, -1, 1))
-    vr = vr.view((1024, 64, dim), (0, -1, 1))
+    nblocks = setval(batchsize / blocksize)
+
+    vt_view1 = vt.view((nblocks, blocksize, blocksize, dim), (0, -1, 0, 1))
+    vt_view2 = vt_view1.view((batchsize, blocksize, dim), ([0, 1], 2, 3))
+    vh = vh.view((batchsize, blocksize, dim), (0, -1, 1))
+    vr = vr.view((batchsize, blocksize, dim), (0, -1, 1))
 
     res = vh - vt_view2 + vr
     transform.passes = [fuser()]
     code = codegen.cpu.print_cpp(gen_ir(res))
     print(code)
 
+
+def neg_transR():
+    def bvm(a, b):
+        return apply(lambda x, y: einsum('i,ij->j', x, y), (a, b))
+
+    nnodes = Var(name='nnodes')
+    nedges = Var(name='nedges')
+    dim = Var(name='dim')
+    batchsize = Var(name='batch_size')
+    Eemb = Tensor((nnodes, dim), name='Eemb')
+    Remb = Tensor((nedges, dim), name='Remb')
+    Proj = Tensor((nedges, dim, dim), name='Proj')
+    h = Tensor((batchsize, ), dtype='int', name='h')
+    t = Tensor((batchsize, ), dtype='int', name='t')
+    r = Tensor((batchsize, ), dtype='int', name='r')
+
+    vh = Eemb[h]
+    vt = Eemb[t]
+    mr = Proj[r]
+    vr = Remb[r]
+
+    blocksize = Var(name='blocksize')
+    nblocks = setval(batchsize / blocksize, name='nblocks')
+
+    output_size = setval(batchsize * blocksize, name='output_size')
+
+    vt = vt.view((nblocks, blocksize, blocksize, dim), (0, -1, 0, 1)).view((batchsize, blocksize, dim), ([0, 1], 2, 3)).view((output_size, dim), ([0, 1], 2))
+    vh = vh.view((batchsize, blocksize, dim), (0, -1, 1)).view((output_size, dim), ([0, 1], 2))
+    vr = vr.view((batchsize, blocksize, dim), (0, -1, 1)).view((output_size, dim), ([0, 1], 2))
+    mr = mr.view((batchsize, blocksize, dim, dim), (0, -1, 1, 2))
+
+
+    res = bvm((vh - vt), mr.view((output_size, dim, dim), ([0, 1], 2, 3))) + vr
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
+
+def var_test1():
+    x = Var(name='x', dtype='float')
+    y = x / 10 + 2
+    res = Var(name='res')
+    res = setval(y)
+    ir = gen_ir(res)
+    code = codegen.cpu.print_cpp(ir)
+    print(code)
+
+
+def var_test2():
+    x1 = Var(dtype='float', name='x')
+    x2 = Var(dtype='float', name='x')
+    y = x1.abs() / 10 + 2 * x2.abs()
+    res = Var(name='res')
+    res = setval(y.round())
+    ir = gen_ir(res)
+    code = codegen.cpu.print_cpp(ir)
+    print(code)
 
 
 if __name__ == "__main__":
@@ -1490,10 +1551,10 @@ if __name__ == "__main__":
     # cond_apply_test2() # pass
     # cond_apply_test3() # pass
 
-    view_apply_test1() # pass
-    view_apply_test2() # pass
-    view_apply_test3() # pass
-    view_apply_test4() # pass
+    # view_apply_test1() # pass
+    # view_apply_test2() # pass
+    # view_apply_test3() # pass
+    # view_apply_test4() # pass
 
 
     # reduce_test1()
@@ -1528,3 +1589,9 @@ if __name__ == "__main__":
     # view_test10()
     # view_test11()
     # neg_transE()
+    neg_transR()
+
+
+    #
+    # var_test1() # pass
+    # var_test2() # pass
