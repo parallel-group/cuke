@@ -1,26 +1,58 @@
-# Automatic Efficient Code Generator for Knowledge Graph Embedding Score Function
+# An Efficient Code Generator for Score Function Computation in Knowledge Graph Embedding
 
-This is a compiler tool for automatic code generation of Knowledge Graph Embedding (KGE) score function computation based on *loop fusion and memory optimization*. 
-Please see our IPDPS24 paper "cuKE: An Efficient Code Generator for Score Function Computation in Knowledge Graph Embedding." for the theories and algorithms. 
-The tool basically has two parts: an Abstract Syntax Graph (ASG) and IR pass based on ASG that analyzes and derives user-input Python code, and a code generation tool that produces the cpu and gpu code based on the analysis results. 
+The artifact includes the code for reproducing the evaluation results in paper "cuKE: An Efficient Code Generator for Score Function Computation in Knowledge Graph Embedding".
 
-
-## Appetizer
-Take a look at a simple example of TransE:
+## An Example
+### Define a Score Function
+Take a look at a simple example of the TransE score function:
 
 ```python
 Eemb = Tensor((nnodes, dim), name='Eemb')
-Remb = Tensor((nedges, dim), name='Remb')
+Remb = Tensor((nrel, dim), name='Remb')
 h = Tensor((batch_size, ), dtype='int', name='h')
 t = Tensor((batch_size, ), dtype='int', name='t')
 r = Tensor((batch_size, ), dtype='int', name='r')
 res = Eemb[h] - Eemb[t] + Remb[r]
-code = codegen.gpu.print_cuda(gen_ir(res))
+```
+
+Here, *Eemb* is the entity embedding vectors for all nodes in the graph, *Remb* is the relation embedding vectors for all relations in the graph, 
+*nnodes* is the number of entities, and *nrel* is the number of relation types. The score function computes how well the relation vector translates the head entity vector to the tail entity vector.
+### Generate the Intermediate Representation
+As the computation is defined, cuKE generates a computational graph to represent the computation. 
+We can then call the *gen_ir* function to generate a loop-based intermediate representation for the computation. 
+```python
+ir = gen_ir(res)
+```
+### Generate CPU Code
+The generated IR can be translated into CPU or GPU code by calling the corresponding *codegen* functions.
+
+```python
+code = codegen.cpu.print_cpp(ir)
 print(code)
 ```
 
-This score function computation quantifies how well the relation vector translates the head entity vector to the tail entity vector. For the given arguments `Eemb`, `Remb`, `h`, `t`, `r` (all of them are tensors), cuKE would generate computational graph node in the ASG and transform it into our defined IR. The generated IR can be transformed based on our transformation and finally generate machine-executable code. The generated CUDA code in TransE looks something like:
+The generated CPU code for the above TransE function looks something like:
 
+
+<span style="color:red">TODO: add the original CPU code here. </span>
+
+### Loop Fusion
+The code has two loops. The first one computes *Eemb[h] - Eemb[t]*, and the second one adds the result of the first operator with *Remb[r]*.
+The two loops can be easily fused into one loop by adding the *fuser* into the transform passes. The fused code looks like:
+
+<span style="color:red">TODO: add the fused CPU code. </span>
+
+While this fusion looks easy, our compiler supports more sophisticated loop fusions for many other score functions that traditional ML compiler such as TVM and XLA ignore. 
+Please refer to our paper for details. 
+
+### Parallelization for GPU
+
+To generate efficient GPU code for the score function, we need to define a few parallelization/optimization passes to map the computation onto the thread hierarchy on a GPU and utilize the memory hierarchy to improve data access efficiency. 
+
+
+<span style="color:red">TODO: explain the GPU code generation step by step. 1) loop tiling, 2) parallelization, 3) shared memory optimization</span>
+
+The final code for the above TransE function looks something like:
 ```cpp
 // split batch_size for block parallel
 for (int _l4 = (blockIdx.x * blockDim.y); _l4 < ((blockIdx.x * blockDim.y) + (batch_size / (batch_size/16))); _l4 += 16) {
@@ -37,12 +69,15 @@ for (int _l4 = (blockIdx.x * blockDim.y); _l4 < ((blockIdx.x * blockDim.y) + (ba
 }
 ```
 
-For the sampled graph, if some relation embeddings can be reused, we can store them into CUDA shared memory for better memory access, we can simply apply this transformation by adding:
+### Runtime Inspection to Avoid Redundant Data Access
+Since the number of relation types in a knowledge graph is much smaller than the number of edges, it is very likely that multiple edges in a sampled batch share the same relation types. 
+In this case, the program only needs to load the embeddings of the unique relations from GPU global memory and stores the data in GPU shared memory for reuse. 
+This optimization can be invoked by simply add a *reuse* attribute to the sampled relations:
 ```python
 r.attr['reuse'] = True
 ```
 
-The code is then changed to:
+The optimized code looks like:
 ```cpp
 __shared__ float arr66[2][64];
 float s89;
@@ -64,105 +99,13 @@ for (int _l4 = (blockIdx.x * blockDim.y); _l4 < ((blockIdx.x * blockDim.y) + (ba
 }
 ```
 
-
-The code generation of the TransE is quite simple. Now take a look at more complex example on TransR:
-
-```python
-Eemb = Tensor((nnodes, dim), name='Eemb')
-Remb = Tensor((nedges, dim), name='Remb')
-Proj = Tensor((nedges, dim, dim), name='Proj')
-h = Tensor((batch_size, ), dtype='int', name='h')
-t = Tensor((batch_size, ), dtype='int', name='t')
-r = Tensor((batch_size, ), dtype='int', name='r')
-r.attr['reuse'] = True
-res = bvm(Eemb[h] - Eemb[t], Proj[r]) + Remb[r]
-code = codegen.gpu.print_cuda(gen_ir(res))
-print(code)
-```
-
-In TransR, the head and tail entity embeddings are first transformed by the respective relation-specific projection matrices `Proj`. Then, the transformed entity embeddings are combined with the relation embedding, and the distance between these two vectors is computed. The generated CUDA code is:
-
-```cpp
-__shared__ float arr158[2][64][64];
-__shared__ float arr187[16][64];
-__shared__ float arr207[2][64];
-
-for (int _l7 = (blockIdx.x * blockDim.y); _l7 < ((blockIdx.x * blockDim.y) + (batch_size / (batch_size/16))); _l7 += 16) {
-  for (int _l8 = (_l7 + threadIdx.y); _l8 < ((_l7 + 16) < batch_size ? ((_l7 + 16)) : (batch_size)); _l8 += blockDim.y) {
-    for (int _l9 = 0; _l9 < dim; _l9 += 64) {
-      for (int _l10 = (_l9 + threadIdx.x); _l10 < ((_l9 + 64) < dim ? ((_l9 + 64)) : (dim)); _l10 += blockDim.x) {
-        // compute elementwise operation
-        arr22[_l8][_l10] = (Eemb[h[_l8]][(_l10)] - Eemb[t[_l8]][(_l10)]);
-      } 
-    } 
-  } 
-} 
-float s183;
-float s230;
-for (int _l11 = (blockIdx.x * blockDim.y); _l11 < ((blockIdx.x * blockDim.y) + (batch_size / (batch_size/16))); _l11 += 16) {
-  for (int _l12 = (_l11 + threadIdx.y); _l12 < ((_l11 + 16) < batch_size ? ((_l11 + 16)) : (batch_size)); _l12 += blockDim.y) {
-    for (int _l13 = 0; _l13 < dim; _l13 += 64) {
-      for (int _l20 = (threadIdx.x + (threadIdx.y * blockDim.x)); _l20 < (r_unique_cnt[blockIdx.x] * 64); _l20 += (blockDim.x * blockDim.y)) {
-        // store vector into shared memory
-        arr207[(_l20 / 64)][(_l20 % 64)] = Remb[r_uniq[blockIdx.x][(_l20 / 64)]][((_l20 % 64) + _l13)];
-      } 
-      __syncthreads();
-      for (int _l14 = (_l13 + threadIdx.x); _l14 < ((_l13 + 64) < dim ? ((_l13 + 64)) : (dim)); _l14 += blockDim.x) {
-        arr187[_l12-_l11][_l14-_l13] = 0;
-      } 
-      for (int _l15 = 0; _l15 < (dim - 0); _l15 += 64) {
-        for (int _l14 = (_l13 + threadIdx.x); _l14 < ((_l13 + 64) < dim ? ((_l13 + 64)) : (dim)); _l14 += blockDim.x) {
-          for (int _l17 = 0; _l17 < 2; _l17 += 1) {
-            for (int _l18 = threadIdx.y; _l18 < 64; _l18 += blockDim.y) {
-              for (int _l19 = threadIdx.x; _l19 < 64; _l19 += blockDim.x) {
-                // store matrix into shared memory
-                arr158[_l17][_l18][_l19] = Proj[r_uniq[blockIdx.x][_l17]][(_l18 + _l13)][(_l19 + _l15)];
-              } 
-            } 
-          } 
-          __syncthreads();
-          for (int _l16 = _l15; _l16 < ((_l15 + 64) < (dim - 0) ? ((_l15 + 64)) : ((dim - 0))); _l16 += 1) {
-            // batched vector-matrix multiplication
-            arr187[_l12-_l11][_l14-_l13] += (arr22[_l12][(_l16)] * s183);
-          } 
-        } 
-      } 
-      for (int _l14 = (_l13 + threadIdx.x); _l14 < ((_l13 + 64) < dim ? ((_l13 + 64)) : (dim)); _l14 += blockDim.x) {
-        s230 = ((r_buf[blockIdx.x][threadIdx.y] < 16) ? arr207[r_buf[blockIdx.x][threadIdx.y]][(_l14 - _l13)] : Remb[(r_buf[blockIdx.x][threadIdx.y] - 16)][_l14]);
-        arr75[_l12][_l14] = (arr187[_l12-_l11][_l14-_l13] + s230);
-      } 
-    } 
-  } 
-}
-```
-
-You can see that our fusion strategies are suitable for KGE score function and the generated code is effectively parallelized and the CUDA characteristic is well-used. For more information, please read our paper:
-
-*cuKE: An Efficient Code Generator for Score Function Computation in Knowledge Graph Embedding. Lihan Hu, Jing Li, Peng Jiang. IPDPS 2024.* 
-
-And you will find the steps and algorithms to parallelize such loops are actually very straightforward. 
-Our tool generates the above parallel codes automatically, and it can parallelize more complicated loops than this simple example.  
+There are implementations of more complicated KGE score functions in ``kge.py``. 
 
 
 
-## Install
-cuKE is easy to install, we provide the requirement lists, so you just need run as follows:
+## Reproduce Results in Paper
 
-```cmd
-git clone https://github.com/pengjiang-hpc/cuke
-cd cuke
-conda create --name YOUR_ENV_NAME --file requirements.txt python=3.8
-conda activate YOUR_ENV_NAME
-```
-
-Congratulations! You are ready to use our code generation tool cuKE!
-
-
-## Note
-The tool is currently a prototype, especially the code genenration and transformation part. 
-We have tested it with all the score functions provided in `kge.py`. 
-More engineering efforts and testing are needed to optimize and stablize it.  
-Contact the author (lihan-hu@uiowa.edu) or open an issue in this repository if you have any questions or suggestions.
+<span style="color:red">TODO: see the example from Yihua's artifact: https://github.com/HPC-Research-Lab/STMatch </span>
 
 ## Reference
 ```bibtex
