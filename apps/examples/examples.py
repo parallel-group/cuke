@@ -1508,22 +1508,22 @@ if __name__ == "__main__":
     # test3() # pass
     # test4() # pass
     # test5() # pass
-    # test6()
-    # test7()
-    # test8()
-    # test9()
-    # test9_1()
-    # test10()
-    # test10_1()
-    # test10_2()
-    # test10_3()
-    # test10_4()
-    # test10_5()
-    # test11()
-    # test12()
-    # test13()
-    # test13_1()
-    # test14()
+    # test6() # pass
+    # test7() # pass
+    # test8() # pass
+    # test9() # pass
+    # test9_1() # pass
+    # test10() # pass
+    # test10_1() # pass
+    # test10_2() # pass
+    # test10_3() # pass
+    # test10_4() # pass
+    # test10_5() # pass
+    test11()
+    test12()
+    test13()
+    test13_1()
+    test14()
     # some slicing examples
     # test15()
     # test16()
@@ -1589,7 +1589,7 @@ if __name__ == "__main__":
     # view_test10()
     # view_test11()
     # neg_transE()
-    neg_transR()
+    # neg_transR()
 
 
     #
