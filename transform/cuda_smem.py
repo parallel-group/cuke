@@ -79,6 +79,73 @@ def _replace_all_ref(stmt, old, new, attr=''):
     t = IRTraversal(action)
     res = t(stmt)
 
+def _total_same(a, b):
+    return a==b
+
+def _replace_smem_ref(stmt, old, new, attr=''):
+    def action(s, res):
+        if isinstance(s, Loop):
+            if attr in s.attr and s.attr[attr]:
+                return [False, False, False, False, False]
+        if isinstance(s, Loop):
+                if _total_same(s.start, old):
+                    s.start = new
+                if _total_same(s.end, old):
+                    s.end = new
+                if _total_same(s.step, old):
+                    s.step = new
+        elif isinstance(s, FilterLoop):
+                if _total_same(s.cond, old):
+                    s.cond = new
+                if _total_same(s.start, old):
+                    s.start = new
+                if _total_same(s.end, old):
+                    s.end = new
+                if _total_same(s.step, old):
+                    s.step = new
+        elif isinstance(s, Expr):
+                if _total_same(s.left, old):
+                    s.left = new
+                if _total_same(s.right, old):
+                    s.right = new
+        elif isinstance(s, Assignment):
+                if _total_same(s.lhs, old):
+                    s.lhs = new
+                if _total_same(s.rhs, old):
+                    s.rhs = new
+        elif isinstance(s, Indexing):
+                if _total_same(s.dobject, old):
+                    s.dobject = new
+                if _total_same(s.idx, old):
+                    s.idx = new
+        elif isinstance(s, Slice):
+                if _total_same(s.start, old):
+                    s.start = new
+                if _total_same(s.stop, old):
+                    s.stop = new
+                if _total_same(s.step, old):
+                    s.step = new
+        elif isinstance(s, Math):
+                if isinstance(s.val, (list, tuple)):
+                    for i in range(len(s.val)):
+                        if _total_same(s.val[i], old):
+                            s.val[i] = new
+                elif _total_same(s.val, old):
+                    s.val = new
+                # if _same_object(s.val, old):
+                #     s.val = new
+        elif isinstance(s, Code):
+                for k in s.outputs:
+                    if _total_same(s.outputs[k], old):
+                        s.outputs[k] = new
+                for k in s.inputs:
+                    if _total_same(s.inputs[k], old):
+                        s.inputs[k] = new
+        return [True, True, True, True, True]
+
+    t = IRTraversal(action)
+    res = t(stmt)
+
 def add_direct_cache(node, eval):
    
     scope = flatten(node.compute)
@@ -510,6 +577,6 @@ def add_indirect_cache(node, n, C, D, *args):
             outer_loop.attr['parent_loop'] = par_loop
         
             # replace all refs
-            replace_all_ref(node.compute, inacc, res)
+            _replace_smem_ref(node.compute, inacc, res)
         
         
