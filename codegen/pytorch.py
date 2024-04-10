@@ -9,47 +9,46 @@ import codegen
 
 indent_width = 4
 
-def to_string(ir, indent = 0):
-    match ir.__class__.__name__:
-        case 'Expr':
-            if ir.op in arith_op.values():
-                return f"({to_string(ir.left)}" + f" {ir.op} " + f"{to_string(ir.right)})"
-            elif ir.op == 'bigger':
-                return f"max({to_string(ir.left)}, {to_string(ir.right)})"
-            elif ir.op == 'smaller':
-                return f"min({to_string(ir.left)}, {to_string(ir.right)})"
-        case 'Assignment':
-            if ir.op is None:
-                return ' ' * indent + f"{to_string(ir.lhs)} = {to_string(ir.rhs)}\n"
+def to_string(stmt, indent = 0):
+    if isinstance(stmt, Expr):
+            if stmt.op in arith_op.values():
+                return f"({to_string(stmt.left)}" + f" {stmt.op} " + f"{to_string(stmt.right)})"
+            elif stmt.op == 'bigger':
+                return f"max({to_string(stmt.left)}, {to_string(stmt.right)})"
+            elif stmt.op == 'smaller':
+                return f"min({to_string(stmt.left)}, {to_string(stmt.right)})"
+    elif isinstance(stmt, Assignment):
+            if stmt.op is None:
+                return ' ' * indent + f"{to_string(stmt.lhs)} = {to_string(stmt.rhs)}\n"
             else:
-                return ' ' * indent + f"{to_string(ir.lhs)} {ir.op}= {to_string(ir.rhs)}\n"
-        case 'Loop':
-            code = ' ' * indent + f"for {to_string(ir.iterate)} in range({to_string(ir.start)}, {to_string(ir.end)}, {to_string(ir.step)}): \n"
-            for e in ir.body:
+                return ' ' * indent + f"{to_string(stmt.lhs)} {stmt.op}= {to_string(stmt.rhs)}\n"
+    elif isinstance(stmt, Loop):
+            code = ' ' * indent + f"for {to_string(stmt.iterate)} in range({to_string(stmt.start)}, {to_string(stmt.end)}, {to_string(stmt.step)}): \n"
+            for e in stmt.body:
                 if e:
                     code += to_string(e, indent + indent_width)
             code += ' ' * indent + "\n"
             return code
-        case 'Scalar' | 'Ndarray':
-            return ir.name()
-        case 'Literal':
-            return str(ir.val)
-        case 'Indexing':
-            if type(ir.dobject) == Slice:
-                return to_string(ir.dobject)
+    elif isinstance(stmt, (Scalar, Ndarray)):
+            return stmt.name()
+    elif isinstance(stmt, Literal):
+            return str(stmt.val)
+    elif isinstance(stmt, Indexing):
+            if type(stmt.dobject) == Slice:
+                return to_string(stmt.dobject)
             else:
-                return f'{to_string(ir.dobject)}[{to_string(ir.idx)}]'
-        case 'Slice':
-            if ir.step == 1 or (type(ir.step) == Literal and ir.step.val == 1):
-                return f'{to_string(ir.start)}:{to_string(ir.stop)}'
+                return f'{to_string(stmt.dobject)}[{to_string(stmt.idx)}]'
+    elif isinstance(stmt, Slice):
+            if stmt.step == 1 or (type(stmt.step) == Literal and stmt.step.val == 1):
+                return f'{to_string(stmt.start)}:{to_string(stmt.stop)}'
             else:
-                return f'{to_string(ir.start)}:{to_string(ir.stop)}:{to_string(ir.step)}'
-        case 'Math':
-            return f'{ir.type}({to_string(ir.val)})'
-        case 'Decl':
+                return f'{to_string(stmt.start)}:{to_string(stmt.stop)}:{to_string(stmt.step)}'
+    elif isinstance(stmt, Math):
+            return f'{stmt.type}({to_string(stmt.val)})'
+    elif isinstance(stmt, Decl):
             return ''
-        case _:
-            return str(ir)
+    else:
+            return str(stmt)
 
 
 def print_pytorch(asg):
