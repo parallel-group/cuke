@@ -1,6 +1,6 @@
 # Cuke
 Cuke is a source-to-source compiler that translates tensor computations written in Python into C++/CUDA code.
-It was initially developed to teach compiler optimization at the University of Iowa but has since evolved into a platform for constructing domain-specific compilers  for different applications.
+It was initially developed to teach compiler optimization at the University of Iowa and has since evolved into a platform for constructing domain-specific compilers  for different applications.
 
 
 ## Installation
@@ -26,9 +26,17 @@ More examples can be found in the ``apps`` folder.
 
 
 ## Comparison with Other Tools
-- How is cuke different from Python libraries such as numpy/scipy/pytorch?
+**Q: How is cuke different from Python libraries such as numpy/scipy/pytorch?**
 
-- How is cuke different from ML compilers such as TVM/XLA? 
+A: The main difference is that cuke is a compiler. Instead of calling pre-compiled code, it generates source code (e.g., C++, CUDA) that runs on different hardware. The code generation is achieved through an intermediate representation, which allows users to apply various optimization transformations, such as loop fusion, parallelization, data buffering, etc. As a result, the generated code often achieves better performance than library-based solutions. Extending cuke to support new hardware is also much easier as it only requires implementation of a new backend. 
+
+**Q: How is cuke different from ML compilers such as TVM/XLA?**
+
+A: Cuke is more focused on supporting application with irregular computation and memory access patterns. Its main differences with TVM/XLA include: 
+1) It supports a more general syntax than basic tensor algebra and thus can express more general computations than neural networks. 
+2) It allows users to define customized operators based on the basic syntax, enabling more aggressive code optimization based on application-specific information. For example, our IPDPS'24 paper shows that cuke can perform aggressive loop fusions that TVM/XLA ignores. 
+3) It supports inspector-executor compilation for indirect tensor indexing to reduce memory access overhead. 
+
   
 
 ## Citation
