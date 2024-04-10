@@ -207,6 +207,8 @@ class smem():
 
 
 transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
+# transform.passes = [fuser(), tiler(16, 64)]
+# transform.passes = [fuser()]
 
 
 def write_code(code, filename):
@@ -273,35 +275,7 @@ def transE():
     code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
-    # Here our cuda code is then generated, next step is create tensors to run the kernel
-    batchsize=256
-    dimension=512
-    relations = 1800
-    entities = 999
-    neg_size = 64
-    hh = torch.randint(0, entities, (batchsize, )).cuda(0)
-    rr = torch.randint(0, relations, (batchsize, )).cuda(0)
-    tt = torch.randint(0, entities, (batchsize, )).cuda(0)
-    eemb = torch.rand((entities, dimension)).cuda(0)
-    remb = torch.rand((relations, dimension)).cuda(0)
-
-    # for no r reuse, we need to comment r.attr['reuse'] = True
-    # y = torch.norm(eemb[hh] - eemb[tt] + remb[rr], p=2, dim=-1)
-    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr)
-    # print(torch.sum(torch.abs(x) - torch.abs(y)))
-
-    # reuse sort and index building
-    indices = torch.argsort(rr)
-    hh = hh[indices]
-    tt = tt[indices]
-    rr = rr[indices]
-    uniq, buf, cnt = inspector(rr, relations)
-    y = eemb[hh] - eemb[tt] + remb[rr]
-    # Before run the code, please check the file in run/.tmp/cude_code.cu to 
-    # make sure each argument corresponds to the arguments in the main function.
-    x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr, uniq, buf, cnt)
-    print(torch.sum(torch.abs(x) - torch.abs(y)))
-
+    # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
 
 
 def transH():
@@ -328,34 +302,6 @@ def transH():
     code = codegen.gpu.print_cuda(gen_ir(res))
     # print(code)
 
-    # cuda code is then generated, next step is create tensors to run the kernel
-
-    # batchsize=512
-    # dimension=512
-    # relations = 51
-    # entities = 9999
-    # hh = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # rr = torch.randint(0, relations, (batchsize, )).cuda(0)
-    # tt = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # eemb = torch.rand((entities, dimension)).cuda(0)
-    # remb = torch.rand((relations, dimension)).cuda(0)
-    # pemb = torch.rand((relations, dimension)).cuda(0)
-
-    # for no r reuse
-    # y = eemb[hh] - eemb[tt] + remb[rr] - torch.einsum('a,ab->ab', torch.einsum('ab,ab->a', pemb[rr], eemb[hh]-eemb[tt]), pemb[rr])
-    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr, pemb)
-
-    # reuse sort and index building
-    # indices = torch.argsort(rr)
-    # hh = hh[indices]
-    # tt = tt[indices]
-    # rr = rr[indices]
-    # uniq, buf, cnt = inspector(rr, relations)
-    # y = y = eemb[hh] - eemb[tt] + remb[rr] - torch.einsum('a,ab->ab', torch.einsum('ab,ab->a', pemb[rr], eemb[hh]-eemb[tt]), pemb[rr])
-    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr, uniq, buf, cnt, pemb)
-    # print(torch.sum(torch.abs(x) - torch.abs(y)), torch.sum(x - y))
-
-
 
 def transR():
     # We need to define all the arguments we need for our computation
@@ -381,31 +327,6 @@ def transR():
     code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
-    # batchsize=512
-    # dimension=256
-    # relations = 30
-    # entities = 9999
-    # hh = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # rr = torch.randint(0, relations, (batchsize, )).cuda(0)
-    # tt = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # eemb = torch.rand((entities, dimension)).cuda(0)
-    # remb = torch.rand((relations, dimension)).cuda(0)
-    # pemb = torch.rand((relations, dimension, dimension)).cuda(0)
-
-    # for no r reuse
-    # y = torch.einsum('ab,abc->ac', eemb[hh] - eemb[tt], pemb[rr]) + remb[rr]
-    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, pemb, rr, remb)
-
-    # reuse sort and index building
-    # indices = torch.argsort(rr)
-    # hh = hh[indices]
-    # tt = tt[indices]
-    # rr = rr[indices]
-    # uniq, buf, cnt = inspector(rr, relations)
-    # y = torch.einsum('ab,abc->ac', eemb[hh] - eemb[tt], pemb[rr]) + remb[rr]
-    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, pemb, rr, uniq, buf, cnt, remb)
-    # print(torch.sum(torch.abs(x) - torch.abs(y)))
-
 
 def transF():
     # We need to define all the arguments we need for our computation
@@ -430,31 +351,6 @@ def transF():
     code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
 
-    # batchsize=512
-    # dimension=512
-    # relations = 30
-    # entities = 9999
-    # hh = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # rr = torch.randint(0, relations, (batchsize, )).cuda(0)
-    # tt = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # eemb = torch.rand((entities, dimension)).cuda(0)
-    # remb = torch.rand((relations, dimension)).cuda(0)
-
-    # # for no r reuse
-    # # y = torch.einsum('ab,ab->a', eemb[hh], eemb[tt]) - torch.einsum('ab,ab->a',(eemb[hh] - eemb[tt]), remb[rr])
-    # # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr)
-
-    # # reuse sort and index building
-    # indices = torch.argsort(rr)
-    # hh = hh[indices]
-    # tt = tt[indices]
-    # rr = rr[indices]
-    # uniq, buf, cnt = inspector(rr, relations)
-    # # y = torch.einsum('ab,ab->a', eemb[hh], eemb[tt]) - torch.einsum('ab,ab->a',(eemb[hh] - eemb[tt]), remb[rr])
-    # y = torch.einsum('ab,ab->a', eemb[hh] + remb[rr], eemb[tt]) + torch.einsum('ab,ab->a',(eemb[tt] - remb[rr]), eemb[hh])
-    # x = run.gpu.compile_and_run(code, batchsize, dimension, entities, eemb, hh, relations, remb, rr, uniq, buf, cnt, tt)
-    # print(torch.sum(torch.abs(x) - torch.abs(y)))
-
 
 def RESCAL():
     # We need to define all the arguments we need for our computation
@@ -477,30 +373,6 @@ def RESCAL():
     # code = codegen.cpu.print_cpp(gen_ir(res))
     code = codegen.gpu.print_cuda(gen_ir(res))
     print(code)
-
-    # batchsize=512
-    # dimension=512
-    # relations = 30
-    # entities = 999
-    # hh = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # rr = torch.randint(0, relations, (batchsize, )).cuda(0)
-    # tt = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # eemb = torch.rand((entities, dimension)).cuda(0)
-    # remb = torch.rand((relations, dimension, dimension)).cuda(0)
-
-    # # for no r reuse
-    # # y = torch.einsum('ab,ab->a', torch.einsum('ab,abc->ac', eemb[hh], remb[rr]), eemb[tt])
-    # # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, 0, remb, rr, tt)
-
-    # # reuse sort and index building
-    # indices = torch.argsort(rr)
-    # hh = hh[indices]
-    # tt = tt[indices]
-    # rr = rr[indices]
-    # uniq, buf, cnt = inspector(rr, relations)
-    # y = torch.einsum('ab,ab->a', torch.einsum('ab,abc->ac', eemb[hh], remb[rr]), eemb[tt])
-    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, 0, remb, rr, uniq, buf, cnt, tt)
-    # print(torch.sum(torch.abs(x) - torch.abs(y)))
 
 
 def backward_transr():
