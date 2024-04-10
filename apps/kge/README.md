@@ -161,12 +161,3 @@ bash test_fig10a.sh
 bash test_fig10b.sh
 ```
 
-## Reference
-```bibtex
-@article{hu2023cuke,
-  author    = {Lihan Hu and Jing Li and Peng Jiang},
-  title     = {cuKE: An Efficient Code Generator for Score Function Computation in Knowledge Graph Embedding},
-  booktitle = {38th IEEE International Parallel & Distributed Processing Symposium (IPDPS)},
-  year = {2024}
-}
-```
