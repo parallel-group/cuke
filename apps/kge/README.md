@@ -107,12 +107,3 @@ There are implementations of more complicated KGE score functions in ``kge.py``.
 
 <span style="color:red">TODO: see the example from Yihua's artifact: https://github.com/HPC-Research-Lab/STMatch </span>
 
-## Reference
-```bibtex
-@article{hu2023cuke,
-  author    = {Lihan Hu and Jing Li and Peng Jiang},
-  title     = {cuKE: An Efficient Code Generator for Score Function Computation in Knowledge Graph Embedding},
-  booktitle = {38th IEEE International Parallel & Distributed Processing Symposium (IPDPS)},
-  year = {2024}
-}
-```
