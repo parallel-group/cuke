@@ -510,6 +510,8 @@ def get_dataset(data_name, data_path='apps/kge/data', format_str='built_in', del
             dataset = KGDatasetFB15k237(data_path)
         elif data_name == 'wn18':
             dataset = KGDatasetWN18(data_path)
+        elif data_name == 'biokg':
+            dataset = KGDatasetBiokg(data_path)
         else:
             assert False, "Unknown dataset {}".format(data_name)
     elif format_str.startswith('raw_udd'):

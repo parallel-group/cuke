@@ -166,24 +166,6 @@ class smem():
                     ASGTraversal(action)(node)
                 # this function should 1) create a shared memory tensor for n.eval, 2) change all reference to the shared memory tensor for code in the scope of node, 3) handle both reduction ore non-reduction data
             
-            if type(n) == TensorOp and n.op_type == 'index' and 'reuse' in n.operators[1].attr and n.operators[1].attr['reuse'] == True:
-                unique_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), dtype='int', name=n.operators[1].name+'_uniq')
-                buf_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), dtype='int', name=n.operators[1].name+'_buf')
-                unique_cnt = Tensor((n.operators[1]._size()[0]/self.C, ), dtype='int', name=n.operators[1].name+'_unique_cnt')
-                n.operators[1].attr['idx'] = [[unique_idx.name, unique_idx], [buf_idx.name, buf_idx], [unique_cnt.name, unique_cnt]]
-                
-                # this function should 1) create a shared memory tensor for n.eval, 2) analyze n.eval.idx to get buf_idx/uniq_idx, 3) change all reference based on buf_idx/uniq_idx for code in the scope of node
-
-                if n.compute:
-                    transform.cuda_smem.add_indirect_cache(node, n, self.C, self.D, unique_idx, buf_idx, unique_cnt)
-                else:
-                    def action(nn, res):
-                        transform.cuda_smem.add_indirect_cache(nn, n, self.C, self.D, unique_idx, buf_idx, unique_cnt)
-                        if nn.ref_by:
-                            for i in nn.ref_by:
-                                    transform.cuda_smem.add_indirect_cache(i, n, self.C, self.D, unique_idx, buf_idx, unique_cnt)
-                    ASGTraversal(action)(node)
-
             def get_assigns(s, res):
                 if type(s) in (Assignment, Code):
                     res.append(s)
@@ -214,13 +196,49 @@ class smem():
                     for i in nn.ref_by:
                         recurrent_call(i)
                 recurrent_call(n)
-
+            
+        # print(codegen.gpu.to_string(node.compute))
         self.eval = node.eval
         t = ASGTraversal(action)(node)
         return node
 
+class indirect_smem():
+    '''
+    Transformation pass for adding memory optimization for the given asgnode.
+    We will load indirect memory access data into GPU shared memory to reuse indices and reduce global memory traffic.
+    '''
+    def __init__(self, C, D):
+        self.C = C
+        self.D = D
 
-transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
+    def __call__(self, node):
+        def action(n, res):
+            if type(n) == TensorOp and n.op_type == 'index' and 'reuse' in n.operators[1].attr and n.operators[1].attr['reuse'] == True:
+                unique_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), dtype='int', name=n.operators[1].name+'_uniq')
+                buf_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), dtype='int', name=n.operators[1].name+'_buf')
+                unique_cnt = Tensor((n.operators[1]._size()[0]/self.C, ), dtype='int', name=n.operators[1].name+'_unique_cnt')
+                n.operators[1].attr['idx'] = [[unique_idx.name, unique_idx], [buf_idx.name, buf_idx], [unique_cnt.name, unique_cnt]]
+                
+                # this function should 1) create a shared memory tensor for n.eval, 2) analyze n.eval.idx to get buf_idx/uniq_idx, 3) change all reference based on buf_idx/uniq_idx for code in the scope of node
+
+                # if n.compute:
+                transform.cuda_smem.add_indirect_cache(node, n, self.C, self.D, unique_idx, buf_idx, unique_cnt)
+                # else:
+                # print(node.op_type, codegen.gpu.to_string(node.compute))
+                def action(nn, res):
+                    transform.cuda_smem.add_indirect_cache(nn, n, self.C, self.D, unique_idx, buf_idx, unique_cnt)
+                    if nn.ref_by:
+                        for i in nn.ref_by:
+                            transform.cuda_smem.add_indirect_cache(i, n, self.C, self.D, unique_idx, buf_idx, unique_cnt)
+                ASGTraversal(action)(node)
+
+            
+        # print(codegen.gpu.to_string(node.compute))
+        self.eval = node.eval
+        t = ASGTraversal(action)(node)
+        return node
+
+transform.passes = [fuser(), tiler(16, 64), smem(16, 64), indirect_smem(16, 64)]
 # transform.passes = [fuser(), tiler(16, 64)]
 # transform.passes = [fuser()]
 
@@ -228,14 +246,14 @@ def init_embddings(dataset):
     projection_emb = None
     entity_emb = torch.rand(dataset.n_entities, args.dim, dtype=torch.float32, device='cuda:0')
     if args.model == 'RESCAL':
-        relation_emb = torch.rand(dataset.n_relations, args.dim * args.dim, dtype=torch.float32, device='cuda:0')
+        relation_emb = torch.rand(dataset.n_relations, args.dim, args.dim, dtype=torch.float32, device='cuda:0')
     else:
         relation_emb = torch.rand(dataset.n_relations, args.dim, dtype=torch.float32, device='cuda:0')
     
     if args.model == 'TransH':
         projection_emb = torch.rand(dataset.n_relations, args.dim, dtype=torch.float32, device='cuda:0')
     elif args.model == 'TransR':
-        projection_emb = torch.rand(dataset.n_relations, args.dim * args.dim, dtype=torch.float32, device='cuda:0')
+        projection_emb = torch.rand(dataset.n_relations, args.dim, args.dim, dtype=torch.float32, device='cuda:0')
 
     return entity_emb, relation_emb, projection_emb
 
@@ -346,9 +364,7 @@ def transE():
     
     # TransE: Eemb[h] - Eemb[t] + Remb[r]
     res = vh - vt + vr
-    # code = codegen.cpu.print_cpp(gen_ir(res))
     code = codegen.gpu.print_cuda(gen_ir(res))
-    print(code)
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
     samplers, entity_emb, relation_emb, projection_emb = get_samplers()
@@ -368,27 +384,6 @@ def transE():
     torch.cuda.synchronize()
     elapsed_time_ms = start_event.elapsed_time(end_event)
     print('model {} on {} dataset completed! batchsize:{} dim:{}\ntotal error: {}, average time cost: {} ms'.format(args.model, args.dataset, args.batch_size, args.dim, torch.sum(torch.abs(x) - torch.abs(y)), elapsed_time_ms/100))
-
-    # # reuse relation: sort and index building, we need to add 'r.attr['reuse'] = True' before gen_ir 
-    # indices = torch.argsort(rel_ids)
-    # head_ids = head_ids[indices]
-    # tail_ids = tail_ids[indices]
-    # rel_ids = rel_ids[indices]
-    # uniq, buf, cnt = inspector(rel_ids, relation_emb.shape[0])
-    # y = entity_emb[head_ids] - entity_emb[tail_ids] + relation_emb[rel_ids]
-    # # Before run the code, please check the file in run/.tmp/cude_code.cu to 
-    # # make sure each argument corresponds to the arguments in the main function.
-    # start_event = torch.cuda.Event(enable_timing=True)
-    # end_event = torch.cuda.Event(enable_timing=True)
-    # # The first time execution should cost too much time, our profiling should begin after warm up
-    # x = run.gpu.compile_and_run(code, args.batch_size, args.dim, 0, entity_emb, head_ids, tail_ids, 0, relation_emb, rel_ids, uniq, buf, cnt)
-    # start_event.record()
-    # for i in range(100):
-    #     x = run.gpu.compile_and_run(code, args.batch_size, args.dim, 0, entity_emb, head_ids, tail_ids, 0, relation_emb, rel_ids, uniq, buf, cnt)
-    # end_event.record()
-    # torch.cuda.synchronize()
-    # elapsed_time_ms = start_event.elapsed_time(end_event)
-    # print('model {} on {} dataset completed! batchsize:{} dim:{}\ntotal error: {}, average time cost: {} ms'.format(args.model, args.dataset, args.batch_size, args.dim, torch.sum(torch.abs(x) - torch.abs(y)), elapsed_time_ms/100))
 
 
 
@@ -412,15 +407,11 @@ def transH():
 
     # TransH: Eemb[h] - Eemb[t] + Remb[r] - Pemb[r]^T * (Eemb[h] - Eemb[t]) * Pemb[r]
     res = vh - vt + vr - bsv(bvv(vp, vh - vt), vp)
-    # code = codegen.cpu.print_cpp(gen_ir(res))
     code = codegen.gpu.print_cuda(gen_ir(res))
-    print(code)
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
     samplers, entity_emb, relation_emb, projection_emb = get_samplers()
     rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
-
-    # neg_tail_ids = neg_g.ndata['id'][neg_g.tail_nid]
 
     # reuse relation: sort and index building, we need to add 'r.attr['reuse'] = True' before gen_ir 
     indices = torch.argsort(rel_ids)
@@ -444,7 +435,6 @@ def transH():
     torch.cuda.synchronize()
     elapsed_time_ms = start_event.elapsed_time(end_event)
     print('model {} on {} dataset completed! batchsize:{} dim:{}\ntotal error: {}, average time cost: {} ms'.format(args.model, args.dataset, args.batch_size, args.dim, torch.sum(torch.abs(x) - torch.abs(y)), elapsed_time_ms/100))
-    print(x, y)
 
 
 
@@ -468,35 +458,32 @@ def transR():
 
     # TransR: (Eemb[h] - Eemb[t])^T * Proj[r] + Remb[r]
     res = bvm(vh - vt, mr) + vr
-    # code = codegen.cpu.print_cpp(gen_ir(res))
     code = codegen.gpu.print_cuda(gen_ir(res))
-    print(code)
 
-    # batchsize=512
-    # dimension=256
-    # relations = 30
-    # entities = 9999
-    # hh = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # rr = torch.randint(0, relations, (batchsize, )).cuda(0)
-    # tt = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # eemb = torch.rand((entities, dimension)).cuda(0)
-    # remb = torch.rand((relations, dimension)).cuda(0)
-    # pemb = torch.rand((relations, dimension, dimension)).cuda(0)
+    # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
 
-    # for no r reuse
-    # y = torch.einsum('ab,abc->ac', eemb[hh] - eemb[tt], pemb[rr]) + remb[rr]
-    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, pemb, rr, remb)
-
-    # reuse sort and index building
-    # indices = torch.argsort(rr)
-    # hh = hh[indices]
-    # tt = tt[indices]
-    # rr = rr[indices]
-    # uniq, buf, cnt = inspector(rr, relations)
-    # y = torch.einsum('ab,abc->ac', eemb[hh] - eemb[tt], pemb[rr]) + remb[rr]
-    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, pemb, rr, uniq, buf, cnt, remb)
-    # print(torch.sum(torch.abs(x) - torch.abs(y)))
-
+    # reuse relation: sort and index building, we need to add 'r.attr['reuse'] = True' before gen_ir 
+    indices = torch.argsort(rel_ids)
+    head_ids = head_ids[indices]
+    tail_ids = tail_ids[indices]
+    rel_ids = rel_ids[indices]
+    uniq, buf, cnt = inspector(rel_ids, relation_emb.shape[0])
+    y = torch.einsum('ab,abc->ac', entity_emb[head_ids] - entity_emb[tail_ids], projection_emb[rel_ids]) + relation_emb[rel_ids]
+    # Before run the code, please check the file in run/.tmp/cude_code.cu to 
+    # make sure each argument corresponds to the arguments in the main function.
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
+    # The first time execution should cost too much time, our profiling should begin after warm up
+    x = run.gpu.compile_and_run(code, args.batch_size, args.dim, 0, entity_emb, head_ids, tail_ids, 0, projection_emb, rel_ids, uniq, buf, cnt, relation_emb)
+    start_event.record()
+    for i in range(100):
+        x = run.gpu.compile_and_run(code, args.batch_size, args.dim, 0, entity_emb, head_ids, tail_ids, 0, projection_emb, rel_ids, uniq, buf, cnt, relation_emb)
+    end_event.record()
+    torch.cuda.synchronize()
+    elapsed_time_ms = start_event.elapsed_time(end_event)
+    print('model {} on {} dataset completed! batchsize:{} dim:{}\ntotal error: {}, average time cost: {} ms'.format(args.model, args.dataset, args.batch_size, args.dim, torch.sum(torch.abs(x) - torch.abs(y)), elapsed_time_ms/100))
 
 def transF():
     # We need to define all the arguments we need for our computation
@@ -516,35 +503,34 @@ def transF():
 
     # TransF: (Eemb[h] + Remb[r])^T * Eemb[t] + (Eemb[t] - Remb[r])^T * Eemb[h]
     res = bvv(vh+vr, vt) + bvv(vt-vr, vh)
-    # code = codegen.cpu.print_cpp(gen_ir(res))
-    # print(code)
     code = codegen.gpu.print_cuda(gen_ir(res))
-    print(code)
 
-    # batchsize=512
-    # dimension=512
-    # relations = 30
-    # entities = 9999
-    # hh = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # rr = torch.randint(0, relations, (batchsize, )).cuda(0)
-    # tt = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # eemb = torch.rand((entities, dimension)).cuda(0)
-    # remb = torch.rand((relations, dimension)).cuda(0)
+    # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
 
-    # # for no r reuse
-    # # y = torch.einsum('ab,ab->a', eemb[hh], eemb[tt]) - torch.einsum('ab,ab->a',(eemb[hh] - eemb[tt]), remb[rr])
-    # # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, tt, 0, remb, rr)
+    # reuse relation: sort and index building, we need to add 'r.attr['reuse'] = True' before gen_ir 
+    indices = torch.argsort(rel_ids)
+    head_ids = head_ids[indices]
+    tail_ids = tail_ids[indices]
+    rel_ids = rel_ids[indices]
+    uniq, buf, cnt = inspector(rel_ids, relation_emb.shape[0])
+    
+    y = torch.einsum('ab,ab->a', entity_emb[head_ids] + relation_emb[rel_ids], entity_emb[tail_ids]) + torch.einsum('ab,ab->a',(entity_emb[tail_ids] - relation_emb[rel_ids]), entity_emb[head_ids])
 
-    # # reuse sort and index building
-    # indices = torch.argsort(rr)
-    # hh = hh[indices]
-    # tt = tt[indices]
-    # rr = rr[indices]
-    # uniq, buf, cnt = inspector(rr, relations)
-    # # y = torch.einsum('ab,ab->a', eemb[hh], eemb[tt]) - torch.einsum('ab,ab->a',(eemb[hh] - eemb[tt]), remb[rr])
-    # y = torch.einsum('ab,ab->a', eemb[hh] + remb[rr], eemb[tt]) + torch.einsum('ab,ab->a',(eemb[tt] - remb[rr]), eemb[hh])
-    # x = run.gpu.compile_and_run(code, batchsize, dimension, entities, eemb, hh, relations, remb, rr, uniq, buf, cnt, tt)
-    # print(torch.sum(torch.abs(x) - torch.abs(y)))
+    # Before run the code, please check the file in run/.tmp/cude_code.cu to 
+    # make sure each argument corresponds to the arguments in the main function.
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
+    # The first time execution should cost too much time, our profiling should begin after warm up
+    x = run.gpu.compile_and_run(code, args.batch_size, args.dim, entity_emb.shape[0], entity_emb, head_ids, relation_emb.shape[0], relation_emb, rel_ids, uniq, buf, cnt, tail_ids)
+    start_event.record()
+    for i in range(100):
+        x = run.gpu.compile_and_run(code, args.batch_size, args.dim, entity_emb.shape[0], entity_emb, head_ids, relation_emb.shape[0], relation_emb, rel_ids, uniq, buf, cnt, tail_ids)
+    end_event.record()
+    torch.cuda.synchronize()
+    elapsed_time_ms = start_event.elapsed_time(end_event)
+    print('model {} on {} dataset completed! batchsize:{} dim:{}\ntotal error: {}, average time cost: {} ms'.format(args.model, args.dataset, args.batch_size, args.dim, torch.sum(torch.abs(x) - torch.abs(y)), elapsed_time_ms/100))
 
 
 def RESCAL():
@@ -565,35 +551,131 @@ def RESCAL():
 
     # RESCAL: Eemb[h]^T * Remb[r] * Eemb[t]
     res = bvv(bvm(vh, mr), vt)
-    # code = codegen.cpu.print_cpp(gen_ir(res))
     code = codegen.gpu.print_cuda(gen_ir(res))
-    print(code)
 
-    # batchsize=512
-    # dimension=512
-    # relations = 30
-    # entities = 999
-    # hh = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # rr = torch.randint(0, relations, (batchsize, )).cuda(0)
-    # tt = torch.randint(0, entities, (batchsize, )).cuda(0)
-    # eemb = torch.rand((entities, dimension)).cuda(0)
-    # remb = torch.rand((relations, dimension, dimension)).cuda(0)
+    # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
 
-    # # for no r reuse
-    # # y = torch.einsum('ab,ab->a', torch.einsum('ab,abc->ac', eemb[hh], remb[rr]), eemb[tt])
-    # # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, 0, remb, rr, tt)
+    # reuse relation: sort and index building, we need to add 'r.attr['reuse'] = True' before gen_ir 
+    indices = torch.argsort(rel_ids)
+    head_ids = head_ids[indices]
+    tail_ids = tail_ids[indices]
+    rel_ids = rel_ids[indices]
+    uniq, buf, cnt = inspector(rel_ids, relation_emb.shape[0])
 
-    # # reuse sort and index building
-    # indices = torch.argsort(rr)
-    # hh = hh[indices]
-    # tt = tt[indices]
-    # rr = rr[indices]
-    # uniq, buf, cnt = inspector(rr, relations)
-    # y = torch.einsum('ab,ab->a', torch.einsum('ab,abc->ac', eemb[hh], remb[rr]), eemb[tt])
-    # x = run.gpu.compile_and_run(code, batchsize, dimension, 0, eemb, hh, 0, remb, rr, uniq, buf, cnt, tt)
-    # print(torch.sum(torch.abs(x) - torch.abs(y)))
+    y = torch.einsum('ab,ab->a', torch.einsum('ab,abc->ac', entity_emb[head_ids], relation_emb[rel_ids]), entity_emb[tail_ids])
+
+    # Before run the code, please check the file in run/.tmp/cude_code.cu to 
+    # make sure each argument corresponds to the arguments in the main function.
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
+    # The first time execution should cost too much time, our profiling should begin after warm up
+    x = run.gpu.compile_and_run(code, args.batch_size, args.dim, entity_emb.shape[0], entity_emb, head_ids, relation_emb.shape[0], relation_emb, rel_ids, uniq, buf, cnt, tail_ids)
+    start_event.record()
+    for i in range(100):
+        x = run.gpu.compile_and_run(code, args.batch_size, args.dim, entity_emb.shape[0], entity_emb, head_ids, relation_emb.shape[0], relation_emb, rel_ids, uniq, buf, cnt, tail_ids)
+    end_event.record()
+    torch.cuda.synchronize()
+    elapsed_time_ms = start_event.elapsed_time(end_event)
+    print('model {} on {} dataset completed! batchsize:{} dim:{}\ntotal error: {}, average time cost: {} ms'.format(args.model, args.dataset, args.batch_size, args.dim, torch.sum(torch.abs(x) - torch.abs(y)), elapsed_time_ms/100))
 
 
+
+def transR():
+    # We need to define all the arguments we need for our computation
+    nnodes = Var(name='nnodes')
+    nedges = Var(name='nedges')
+    dim = Var(name='dim')
+    batch_size = Var(name='batch_size')
+    Eemb = Tensor((nnodes, dim), name='Eemb')
+    Remb = Tensor((nedges, dim), name='Remb')
+    Proj = Tensor((nedges, dim, dim), name='Proj')
+    h = Tensor((batch_size, ), dtype='int', name='h')
+    t = Tensor((batch_size, ), dtype='int', name='t')
+    r = Tensor((batch_size, ), dtype='int', name='r')
+    r.attr['reuse'] = True
+    vh = Eemb[h]
+    vt = Eemb[t]
+    mr = Proj[r]
+    vr = Remb[r]
+
+    # TransR: (Eemb[h] - Eemb[t])^T * Proj[r] + Remb[r]
+    res = bvm(vh - vt, mr) + vr
+    code = codegen.gpu.print_cuda(gen_ir(res))
+
+    # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+
+    # reuse relation: sort and index building, we need to add 'r.attr['reuse'] = True' before gen_ir 
+    indices = torch.argsort(neg_rel_ids)
+    neg_head_ids = neg_head_ids[indices]
+    neg_tail_ids = neg_tail_ids[indices]
+    neg_rel_ids = neg_rel_ids[indices]
+    uniq, buf, cnt = inspector(neg_rel_ids, relation_emb.shape[0])
+    y = torch.einsum('ab,abc->ac', entity_emb[neg_head_ids] - entity_emb[neg_tail_ids], projection_emb[neg_rel_ids]) + relation_emb[neg_rel_ids]
+    # Before run the code, please check the file in run/.tmp/cude_code.cu to 
+    # make sure each argument corresponds to the arguments in the main function.
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
+    # The first time execution should cost too much time, our profiling should begin after warm up
+    x = run.gpu.compile_and_run(code, args.batch_size, args.dim, 0, entity_emb, neg_head_ids, neg_tail_ids, 0, projection_emb, neg_rel_ids, uniq, buf, cnt, relation_emb)
+    start_event.record()
+    for i in range(100):
+        x = run.gpu.compile_and_run(code, args.batch_size, args.dim, 0, entity_emb, neg_head_ids, neg_tail_ids, 0, projection_emb, neg_rel_ids, uniq, buf, cnt, relation_emb)
+    end_event.record()
+    torch.cuda.synchronize()
+    elapsed_time_ms = start_event.elapsed_time(end_event)
+    print('model {} on {} dataset completed! batchsize:{} dim:{}\ntotal error: {}, average time cost: {} ms'.format(args.model, args.dataset, args.batch_size, args.dim, torch.sum(torch.abs(x) - torch.abs(y)), elapsed_time_ms/100))
+
+
+def transF():
+    # We need to define all the arguments we need for our computation
+    nnodes = Var(name='nnodes')
+    nedges = Var(name='nedges')
+    dim = Var(name='dim')
+    batch_size = Var(name='batch_size')
+    Eemb = Tensor((nnodes, dim), name='Eemb')
+    Remb = Tensor((nedges, dim), name='Remb')
+    h = Tensor((batch_size, ), dtype='int', name='h')
+    t = Tensor((batch_size, ), dtype='int', name='t')
+    r = Tensor((batch_size, ), dtype='int', name='r')
+    r.attr['reuse'] = True
+    vh = Eemb[h]
+    vt = Eemb[t]
+    vr = Remb[r]
+
+    # TransF: (Eemb[h] + Remb[r])^T * Eemb[t] + (Eemb[t] - Remb[r])^T * Eemb[h]
+    res = bvv(vh+vr, vt) + bvv(vt-vr, vh)
+    code = codegen.gpu.print_cuda(gen_ir(res))
+
+    # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+
+    # reuse relation: sort and index building, we need to add 'r.attr['reuse'] = True' before gen_ir 
+    indices = torch.argsort(neg_rel_ids)
+    neg_head_ids = neg_head_ids[indices]
+    neg_tail_ids = neg_tail_ids[indices]
+    neg_rel_ids = neg_rel_ids[indices]
+    uniq, buf, cnt = inspector(neg_rel_ids, relation_emb.shape[0])
+    
+    y = torch.einsum('ab,ab->a', entity_emb[neg_head_ids] + relation_emb[neg_rel_ids], entity_emb[neg_tail_ids]) + torch.einsum('ab,ab->a',(entity_emb[neg_tail_ids] - relation_emb[neg_rel_ids]), entity_emb[neg_head_ids])
+
+    # Before run the code, please check the file in run/.tmp/cude_code.cu to 
+    # make sure each argument corresponds to the arguments in the main function.
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
+    # The first time execution should cost too much time, our profiling should begin after warm up
+    x = run.gpu.compile_and_run(code, args.batch_size, args.dim, entity_emb.shape[0], entity_emb, neg_head_ids, relation_emb.shape[0], relation_emb, neg_rel_ids, uniq, buf, cnt, neg_tail_ids)
+    start_event.record()
+    for i in range(100):
+        x = run.gpu.compile_and_run(code, args.batch_size, args.dim, entity_emb.shape[0], entity_emb, neg_head_ids, relation_emb.shape[0], relation_emb, neg_rel_ids, uniq, buf, cnt, neg_tail_ids)
+    end_event.record()
+    torch.cuda.synchronize()
+    elapsed_time_ms = start_event.elapsed_time(end_event)
+    print('model {} on {} dataset completed! batchsize:{} dim:{}\ntotal error: {}, average time cost: {} ms'.format(args.model, args.dataset, args.batch_size, args.dim, torch.sum(torch.abs(x) - torch.abs(y)), elapsed_time_ms/100))
 
 if __name__ == "__main__":
     if args.model == 'TransE':
@@ -606,3 +688,7 @@ if __name__ == "__main__":
         transF()
     elif args.model == 'RESCAL':
         RESCAL()
+    elif args.model == 'neg_TransR':
+        neg_transR()
+    elif args.model == 'neg_TransF':
+        neg_transF()

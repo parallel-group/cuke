@@ -344,7 +344,7 @@ class TrainDataset(object):
         return EdgeSampler(self.g,
                            seed_edges=F.tensor(self.edge_parts[rank]),
                            batch_size=batch_size,
-                           neg_sample_size=int(neg_sample_size/neg_chunk_size),
+                           neg_sample_size=neg_sample_size,
                            chunk_size=neg_chunk_size,
                            negative_mode=mode,
                            num_workers=num_workers,

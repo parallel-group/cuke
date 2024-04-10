@@ -34,13 +34,49 @@ print(code)
 The generated CPU code for the above TransE function looks something like:
 
 
-<span style="color:red">TODO: add the original CPU code here. </span>
+```cpp
+auto Eemb = obj_Eemb.accessor<float, 2>();
+auto h = obj_h.accessor<int, 1>();
+auto t = obj_t.accessor<int, 1>();
+torch::Tensor obj_arr22 = torch::empty({batch_size,dim}, at::kFloat);
+auto arr22 = obj_arr22.accessor<float, 2>();
+for (int _l0 = 0; _l0 < batch_size; _l0 += 1) {
+  for (int _l1 = 0; _l1 < dim; _l1 += 1) {
+    arr22[_l0][_l1] = (Eemb[h[_l0]][(_l1)] - Eemb[t[_l0]][(_l1)]);
+  } 
+} 
+auto Remb = obj_Remb.accessor<float, 2>();
+auto r = obj_r.accessor<int, 1>();
+torch::Tensor obj_arr38 = torch::empty({batch_size,dim}, at::kFloat);
+auto arr38 = obj_arr38.accessor<float, 2>();
+for (int _l2 = 0; _l2 < batch_size; _l2 += 1) {
+  for (int _l3 = 0; _l3 < dim; _l3 += 1) {
+    arr38[_l2][_l3] = (arr22[_l2][_l3] + Remb[r[_l2]][(_l3)]);
+  } 
+} 
+return obj_arr38;
+```
 
 ### Loop Fusion
 The code has two loops. The first one computes *Eemb[h] - Eemb[t]*, and the second one adds the result of the first operator with *Remb[r]*.
 The two loops can be easily fused into one loop by adding the *fuser* into the transform passes. The fused code looks like:
 
-<span style="color:red">TODO: add the fused CPU code. </span>
+
+```cpp
+auto Eemb = obj_Eemb.accessor<float, 2>();
+auto h = obj_h.accessor<int, 1>();
+auto t = obj_t.accessor<int, 1>();
+auto Remb = obj_Remb.accessor<float, 2>();
+auto r = obj_r.accessor<int, 1>();
+torch::Tensor obj_arr38 = torch::empty({batch_size,dim}, at::kFloat);
+auto arr38 = obj_arr38.accessor<float, 2>();
+for (int _l2 = 0; _l2 < batch_size; _l2 += 1) {
+  for (int _l3 = 0; _l3 < dim; _l3 += 1) {
+    arr38[_l2][_l3] = ((Eemb[h[_l2]][(_l3)] - Eemb[t[_l2]][(_l3)]) + Remb[r[_l2]][(_l3)]);
+  } 
+} 
+return obj_arr38;
+```
 
 While this fusion looks easy, our compiler supports more sophisticated loop fusions for many other score functions that traditional ML compiler such as TVM and XLA ignore. 
 Please refer to our paper for details. 
@@ -50,7 +86,9 @@ Please refer to our paper for details.
 To generate efficient GPU code for the score function, we need to define a few parallelization/optimization passes to map the computation onto the thread hierarchy on a GPU and utilize the memory hierarchy to improve data access efficiency. 
 
 
-<span style="color:red">TODO: explain the GPU code generation step by step. 1) loop tiling, 2) parallelization, 3) shared memory optimization</span>
+For the *batch_size* loop, we need to tile it into two loops. We map the first tiled loop to different thread blocks of the GPU, and the second tiled loop to different warps in the current thread block. For the *dimension* loop, we also tile it into two loops, the first tiled loop is conducive to subsequent shared memory optimization and the second tiled loop is mapped to different threads in the current warp. 
+
+Our shared memory optimization is to search the intermediate results to be stored in GPU global memory during the computation and replace them into GPU shared memory, which reduces global memory access in the CUDA kernel.
 
 The final code for the above TransE function looks something like:
 ```cpp
@@ -105,7 +143,23 @@ There are implementations of more complicated KGE score functions in ``kge.py``.
 
 ## Reproduce Results in Paper
 
-<span style="color:red">TODO: see the example from Yihua's artifact: https://github.com/HPC-Research-Lab/STMatch </span>
+<span style="color:red">TODO: TVM implementation </span>
+
+We provide some shell scripts for batched test, or you can input the command to test a specific pattern and graph directly.
+
+### Reproducing the results of Figure 9
+```bash
+bash test_fig9a.sh
+bash test_fig9b.sh
+bash test_fig9c.sh
+bash test_fig9d.sh
+```
+
+### Reproducing the results of Figure 10
+```bash
+bash test_fig10a.sh
+bash test_fig10b.sh
+```
 
 ## Reference
 ```bibtex

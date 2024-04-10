@@ -452,9 +452,13 @@ def add_indirect_cache(node, n, C, D, *args):
             #     indices.append(temp.idx)
             temp = temp.dobject
         cur_loop = _get_loop_pos(scope, temp)
-        
-        # cur_loop = indices[-1].attr['loop']
+        # print(codegen.gpu.to_string(scope), codegen.gpu.to_string(temp), '***', codegen.gpu.to_string(cur_loop))
+        # cur_loop = indices[0].attr['loop']
+        # print(indices, codegen.gpu.to_string(indices))
+        # for i in indices:
+        #     print(i.attr['loop'], codegen.gpu.to_string(i.attr['loop']))
         par_loop = cur_loop.attr['parent_loop']
+        # print(codegen.gpu.to_string(par_loop))
         
 
         # branch for matrix and vector
@@ -463,7 +467,7 @@ def add_indirect_cache(node, n, C, D, *args):
         buf_idx = Indexing(buf_idx, Literal(-1, 'int'))
         buf_idx.idx = ThreadIdy()
         outer_loop = None
-
+        # print(n.eval.size, codegen.gpu.to_string(n.eval))
         if len(n.eval.size) == 3:
             smem = Ndarray(n.eval.dtype, [2, D, D])
             smem.attr['mem_layer'] = 'smem'
@@ -512,7 +516,7 @@ def add_indirect_cache(node, n, C, D, *args):
 
             res = Scalar(n.eval.dtype)
             res_assign = Assignment(res, Expr(Expr(buf_idx, C, '<'), load_smem, 'ternary', new_rhs))
-
+            # print(codegen.gpu.to_string(res_assign), codegen.gpu.to_string(cur_loop))
             cur_loop.body.insert(0, res_assign)
             # cur_loop.body.insert(0, col_assign)
             # cur_loop.body.insert(0, row_assign)
@@ -522,6 +526,14 @@ def add_indirect_cache(node, n, C, D, *args):
             # node.decl.append(Decl(col_off))
             node.decl.append(Decl(res))
             # node.decl.append(Decl(row_off))
+            if outer_loop:
+                outer_loop.attr['load'] = True
+                par_loop.body.insert(0, SyncThreads())
+                par_loop.body.insert(0, outer_loop)
+                outer_loop.attr['parent_loop'] = par_loop
+            
+                # replace all refs
+                replace_all_ref(node.compute, inacc, res)
             
         elif len(n.eval.size) == 2:
             smem = Ndarray(n.eval.dtype, [2, D])
@@ -570,13 +582,13 @@ def add_indirect_cache(node, n, C, D, *args):
             # node.decl.append(Decl(col_off))
             node.decl.append(Decl(res))
 
-        if outer_loop:
-            outer_loop.attr['load'] = True
-            par_loop.body.insert(0, SyncThreads())
-            par_loop.body.insert(0, outer_loop)
-            outer_loop.attr['parent_loop'] = par_loop
-        
-            # replace all refs
-            _replace_smem_ref(node.compute, inacc, res)
-        
+            if outer_loop:
+                outer_loop.attr['load'] = True
+                par_loop.body.insert(0, SyncThreads())
+                par_loop.body.insert(0, outer_loop)
+                outer_loop.attr['parent_loop'] = par_loop
+            
+                # replace all refs
+                _replace_smem_ref(node.compute, inacc, res)
+            
         
