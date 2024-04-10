@@ -32,9 +32,9 @@ A: The main difference is that cuke is a compiler. Instead of calling pre-compil
 
 **Q: How is cuke different from ML compilers such as TVM/XLA?**
 
-A: Cuke is more focused on supporting application with irregular computation and memory access patterns. Its main differences with TVM/XLA include: 
+A: Cuke is more focused on supporting applications with irregular computation and memory access patterns. Its main differences with TVM/XLA include: 
 1) It supports a more general syntax than basic tensor algebra and thus can express more general computations than neural networks. 
-2) It allows users to define customized operators based on the basic syntax, enabling more aggressive code optimization based on application-specific information. For example, our IPDPS'24 paper shows that cuke can perform aggressive loop fusions that TVM/XLA ignores. 
+2) It allows users to compose customized operators using the basic syntax, enabling more aggressive code optimization based on application-specific information. For example, our IPDPS'24 paper shows that cuke can perform aggressive loop fusions that TVM/XLA ignores. 
 3) It supports inspector-executor compilation for indirect tensor indexing to reduce memory access overhead. 
 
   
