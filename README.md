@@ -15,29 +15,27 @@ git clone https://github.com/pengjiang-hpc/cuke
 pip install cuke/
 ```
 
-You can also use ``python setup.py install`` to install cuke
-
 
 ## Usage
 **An example of elementwise add**
 ```python
-#cuke.asg contains the class definitions for Tensor and Operators.
+# cuke.asg contains the class definitions of Tensor and Operators.
 from cuke.asg import *
-#cuke.asg2ir contains the translation function from ASG to IR.
+# cuke.asg2ir contains the translation function from ASG to IR.
 from cuke.asg2ir import gen_ir
-#cuke.codegen is the module translating IR to C++ code. 
+# cuke.codegen is the module translating IR to C++ code. 
 import cuke.codegen as codegen
 
-#Create two tensor nodes: A and B
+# Create two tensor nodes: A and B of size 10
 A = Tensor((10, ))
 B = Tensor((10, ))
 
-#Create an elementwise add operator.
-#A and B are the input nodes, res is the output node. 
+# Create an elementwise add operator.
+# 'A' and 'B' are the input nodes, 'res' is the output node. 
 res = A + B
 
-#Now we get an ASG of three tensor nodes.
-#`gen_ir` invokes the asg->ir procedure and `print_cpp` returns the generated C++ code. 
+# Now, we get a computational graph of three tensor nodes.
+# 'gen_ir' invokes the asg->ir procedure and 'print_cpp' returns the generated C++ code. 
 code = codegen.cpu.print_cpp(gen_ir(res))
 print(code)
 ```
@@ -49,19 +47,19 @@ def is_in(x, li):
     """)
     found = Var(dtype='int')
     found.attr['is_arg'] = False
-    #inline is an operator for calling external functions. 
-    #F, LI, LSIZE, and X are all placeholders that will be replaced by the tensor nodes.
+    # inline is an operator for calling external functions. 
+    # F, LI, LSIZE, and X are all placeholders that will be replaced by the tensor nodes.
     return inline(src, [('F', found)], [('X', x), ('LI', li), ('LSIZE', li._size()[0])])
 
 def intersect(a, b):
-    #We create an apply operator, a is the input and cond is the output.
-    #The 'apply' operator invokes the 'is_in' function for each element of 'a'(x=a[i]).
-    #The cond has the same size as a. 
-    #cond stores the result of the is_in function for each element of a in the corresponding position(cond[i]=is_in(a[i], b)).
+    # We create an apply operator, 'a' is the input and 'cond' is the output.
+    # The 'apply' operator invokes the 'is_in' function for each element of 'a'(x=a[i]).
+    # The 'cond' has the same size as 'a'. 
+    # 'cond' stores the result of the 'is_in' function for each element of 'a' in the corresponding position(cond[i]=is_in(a[i], b)).
     cond = a.apply(lambda x: is_in(x, b))
-    #We create a conditional apply operator.
-    #For each element 'x' of a(x=a[i], i is the iterator), if cond[i] is true, we make an assignment c[csize++]=a[i].
-    #The size of c(csize) is not the same as a 
+    # We create a conditional apply operator.
+    # For each element 'x' of 'a'(x=a[i], i is the iterator), if 'cond[i]' is true, we make an assignment c[csize++]=a[i].
+    # The size of 'c'(csize) is not the same as 'a' 
     c = a.apply(lambda x: x, cond=cond)
     return c
 
@@ -80,11 +78,11 @@ More examples can be found in the ``apps`` folder.
 
 A: The main difference is that cuke is a compiler. Instead of calling pre-compiled code, it generates source code (e.g., C++, CUDA) that runs on different hardware. The code generation is achieved through an intermediate representation, which allows users to apply various optimization transformations, such as loop fusion, parallelization, data buffering, etc. As a result, the generated code often achieves better performance than library-based solutions. Extending cuke to support new hardware is also much easier as it only requires implementation of a new backend. 
 
-**Q: How is cuke different from ML compilers such as TVM/XLA?**
+**Q: How is cuke different from ML compilers such as TVM/XLA/TorchScript?**
 
-A: Cuke is more focused on supporting applications with irregular computation and memory access patterns. Its main differences with TVM/XLA include: 
+A: Cuke is more focused on supporting applications with irregular computation and memory access patterns. Its main differences with TVM/XLA/TorchScript include: 
 1) It supports a more general syntax than basic tensor algebra and thus can express more general computations than neural networks. 
-2) It allows users to compose customized operators using the basic syntax, enabling more aggressive code optimization based on application-specific information. For example, our IPDPS'24 paper shows that cuke can perform aggressive loop fusions that TVM/XLA ignores. 
+2) It allows users to compose customized operators using the basic syntax, enabling more aggressive code optimization based on application-specific information. For example, our IPDPS'24 paper shows that cuke can perform aggressive loop fusions that TVM/XLA/TorchScript ignores. 
 3) It supports inspector-executor compilation for indirect tensor indexing to reduce memory access overhead. 
 
   
