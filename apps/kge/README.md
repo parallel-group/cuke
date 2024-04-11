@@ -145,7 +145,9 @@ There are implementations of more complicated KGE score functions in ``kge.py``.
 
 <span style="color:red">TODO: TVM implementation </span>
 
-We provide some shell scripts for batched test, or you can input the command to test a specific pattern and graph directly.
+We provide some shell scripts for batched test, or you can input the command to test a specific pattern and graph directly. The input graph datasets will be automatically downloaded when you first run the scripts.
+
+To test score function computation on TVM, please make sure tvm has been successfully installed.
 
 ### Reproducing the results of Figure 9
 ```bash
@@ -160,4 +162,3 @@ bash test_fig9d.sh
 bash test_fig10a.sh
 bash test_fig10b.sh
 ```
-
