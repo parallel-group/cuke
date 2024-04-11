@@ -86,8 +86,8 @@ def transH():
     code = gpu.print_cuda(gen_ir(res))
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
-    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
-    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
     # reuse relation: sort and index building, we need to add 'r.attr['reuse'] = True' before gen_ir 
     indices = torch.argsort(rel_ids)
@@ -135,8 +135,8 @@ def transR():
     code = gpu.print_cuda(gen_ir(res))
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
-    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
-    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
     # reuse relation: sort and index building, we need to add 'r.attr['reuse'] = True' before gen_ir 
     indices = torch.argsort(rel_ids)
@@ -180,8 +180,8 @@ def transF():
     code = gpu.print_cuda(gen_ir(res))
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
-    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
-    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
     # reuse relation: sort and index building, we need to add 'r.attr['reuse'] = True' before gen_ir 
     indices = torch.argsort(rel_ids)
@@ -226,8 +226,8 @@ def RESCAL():
     code = gpu.print_cuda(gen_ir(res))
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
-    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
-    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
     # reuse relation: sort and index building, we need to add 'r.attr['reuse'] = True' before gen_ir 
     indices = torch.argsort(rel_ids)
@@ -275,8 +275,8 @@ def neg_transR():
     code = gpu.print_cuda(gen_ir(res))
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
-    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
-    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
     # reuse relation: sort and index building, we need to add 'r.attr['reuse'] = True' before gen_ir 
     indices = torch.argsort(neg_rel_ids)
@@ -321,8 +321,8 @@ def neg_transF():
     code = gpu.print_cuda(gen_ir(res))
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
-    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
-    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
     # reuse relation: sort and index building, we need to add 'r.attr['reuse'] = True' before gen_ir 
     indices = torch.argsort(neg_rel_ids)

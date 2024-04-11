@@ -31,8 +31,8 @@ def transE():
 
 
 def transH():
-    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
-    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
     
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
@@ -49,8 +49,8 @@ def transH():
 
 
 def transR():
-    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
-    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
     
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
@@ -65,8 +65,8 @@ def transR():
     print('Pytorch model {} on {} dataset completed! batchsize:{} dim:{}\naverage time cost: {} ms'.format(args.model, args.dataset, args.batch_size, args.dim, elapsed_time_ms/100))
 
 def transF():
-    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
-    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
     
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
@@ -82,8 +82,8 @@ def transF():
 
 
 def RESCAL():
-    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
-    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
     
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
@@ -100,8 +100,8 @@ def RESCAL():
 
 
 def neg_transR():
-    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
-    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
@@ -117,8 +117,8 @@ def neg_transR():
 
 
 def neg_transF():
-    samplers, entity_emb, relation_emb, projection_emb = get_samplers()
-    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(samplers)
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
