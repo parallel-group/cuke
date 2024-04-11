@@ -1,8 +1,6 @@
-from asg import *
-from helpers import flatten, same_object, get_loops_at_level, IRTraversal, replace_all_ref
-from asg import *
-from ir import *
-import codegen
+from ..asg import *
+from ..helpers import flatten, same_object, get_loops_at_level, IRTraversal, replace_all_ref
+from ..ir import *
 import copy
 
 def _get_level_loops(compute, loop_dict, level):

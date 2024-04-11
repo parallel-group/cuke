@@ -1,10 +1,9 @@
-import transform
-from helpers import collect_ir, get_input_nodes
+from .. import transform
+from ..helpers import collect_ir, get_input_nodes
 import random
 import string
 import os
-import asg
-import ir
+from .. import asg, ir
 
 #https://github.com/pytorch/pytorch/blob/main/torch/csrc/api/include/torch/types.h
 type_map = {'int': 'kInt', 

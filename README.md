@@ -9,11 +9,14 @@ Make sure to use python 3.8 or later:
 conda create -n cuke python=3.8
 conda activate cuke 
 ```
-Check out and install this repository: TODO: add a setup.py to the repo for installation.
+Check out and install this repository:
 ```cmd
 git clone https://github.com/pengjiang-hpc/cuke
-pip install -e cuke
+pip install cuke/
 ```
+
+You can also use ``python setup.py install`` to install cuke
+
 
 ## Usage
 

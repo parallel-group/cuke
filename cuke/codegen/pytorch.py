@@ -1,10 +1,10 @@
 import random
 import string
-from codegen.oob import lower_bound_padding
-from codegen.tensorize import tensorize
-from asg import *
-from ir import *
-import codegen
+# from codegen.oob import lower_bound_padding
+# from codegen.tensorize import tensorize
+from ..asg import *
+from ..ir import *
+# import codegen
 
 
 indent_width = 4
