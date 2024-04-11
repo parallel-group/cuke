@@ -33,16 +33,6 @@ def to_string(stmt):
                 return f"{to_string(stmt.lhs)} = {to_string(stmt.rhs)};\n"
             else:
                 return f"{to_string(stmt.lhs)} {stmt.op}= {to_string(stmt.rhs)};\n"
-    elif isinstance(stmt, ir.Loop):
-            code = ''
-            if stmt.attr['ptype'] in ['naive', 'reduction'] and 'plevel' in stmt.attr and 'nprocs' in stmt.attr:
-                code += f"#pragma omp parallel for num_threads({stmt.attr['nprocs'][stmt.attr['plevel']][0]})\n"
-            code += f"for ({get_dtype(stmt.end)} {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
-            for e in stmt.body:
-                if e:
-                    code += to_string(e)
-            code += "} \n"
-            return code
     elif isinstance(stmt, ir.FilterLoop):
             code = ''
             if stmt.attr['ptype'] == 'naive' and 'plevel' in stmt.attr and 'nprocs' in stmt.attr:
@@ -56,6 +46,16 @@ def to_string(stmt):
                 if e:
                     code += to_string(e)
             code += "} \n"
+            code += "} \n"
+            return code
+    elif isinstance(stmt, ir.Loop):
+            code = ''
+            if stmt.attr['ptype'] in ['naive', 'reduction'] and 'plevel' in stmt.attr and 'nprocs' in stmt.attr:
+                code += f"#pragma omp parallel for num_threads({stmt.attr['nprocs'][stmt.attr['plevel']][0]})\n"
+            code += f"for ({get_dtype(stmt.end)} {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
+            for e in stmt.body:
+                if e:
+                    code += to_string(e)
             code += "} \n"
             return code
     elif isinstance(stmt, (ir.Scalar, ir.Ndarray)):
