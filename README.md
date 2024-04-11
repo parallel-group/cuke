@@ -50,8 +50,9 @@ def is_in(x, li):
 
 def intersect(a, b):
     #We create an apply operator, a is the input and cond is the output.
-    #The 'apply' operator invokes the 'is_in' function for each element of 'a'.
-    #The cond has the same size as a, and stores the result of the is_in function for each element of a in the corresponding position.
+    #The 'apply' operator invokes the 'is_in' function for each element of 'a'(a[i]).
+    #The cond has the same size as a. 
+    #cond stores the result of the is_in function for each element of a in the corresponding position(cond[i]=is_in(a[i], b)).
     cond = a.apply(lambda x: is_in(x, b))
     #We creats an conditional apply opearator.
     #For each element 'x' of a(x=a[i], i is the iterator), if cond[i] is true, we make an assignment c[csize++]=a[i].
