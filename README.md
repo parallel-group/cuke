@@ -34,7 +34,7 @@ B = Tensor((10, ))
 res = A + B
 
 #Now we get an ASG of three tensor nodes.
-#gen_ir invokes the asg->ir procedure and print_cpp return the generated C++ code. 
+#`gen_ir` invokes the asg->ir procedure and `print_cpp` returns the generated C++ code. 
 code = codegen.cpu.print_cpp(gen_ir(res))
 print(code)
 ```
