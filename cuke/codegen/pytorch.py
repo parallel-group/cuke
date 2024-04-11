@@ -3,14 +3,14 @@ import string
 # from codegen.oob import lower_bound_padding
 # from codegen.tensorize import tensorize
 from ..asg import *
-# from ..ir import *
+from ..ir import *
 # import codegen
 
 
 indent_width = 4
 
 def to_string(stmt, indent = 0):
-    if isinstance(stmt, ir.Expr):
+    if isinstance(stmt, Expr):
             if stmt.op in arith_op.values():
                 return f"({to_string(stmt.left)}" + f" {stmt.op} " + f"{to_string(stmt.right)})"
             elif stmt.op == 'bigger':
