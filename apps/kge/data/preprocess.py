@@ -156,8 +156,13 @@ class KGDatasetFB15k237(KGDataset):
             _download_and_extract(url, path, name + '.zip')
         self.path = os.path.join(path, name)
 
-        super(KGDatasetFB15k237, self).__init__(os.path.join(self.path, 'entities.dict'),
-                                                os.path.join(self.path, 'relations.dict'),
+        if not os.path.exists(os.path.join(path, 'FB15k')):
+            print('File not found. Downloading from', url)
+            _download_and_extract(url, path, 'FB15k' + '.zip')
+        self.fb15kpath = os.path.join(path, 'FB15k')
+
+        super(KGDatasetFB15k237, self).__init__(os.path.join(self.fb15kpath, 'entities.dict'),
+                                                os.path.join(self.fb15kpath, 'relations.dict'),
                                                 os.path.join(self.path, 'train.txt'),
                                                 os.path.join(self.path, 'valid.txt'),
                                                 os.path.join(self.path, 'test.txt'))
@@ -502,7 +507,7 @@ class KGDatasetUDD(KGDataset):
         return self.rmap_file
     
 
-def get_dataset(data_name, data_path='apps/kge/data', format_str='built_in', delimiter='\t', files=None, has_edge_importance=False):
+def get_dataset(data_name, data_path=os.path.dirname(__file__), format_str='built_in', delimiter='\t', files=None, has_edge_importance=False):
     if format_str == 'built_in':
         if data_name == 'FB15k':
             dataset = KGDatasetFB15k(data_path)
