@@ -19,7 +19,7 @@ You can also use ``python setup.py install`` to install cuke
 
 
 ## Usage
-
+**A simple tensor add example: A + B**
 ```python
 import cuke.codegen as codegen
 from cuke.asg import *
@@ -31,7 +31,7 @@ res = A+B
 code = codegen.cpu.print_cpp(gen_ir(res))
 print(code)
 ```
-
+**An example of set intersection using cond apply**
  ```python
 def is_in(x, li):
     src = inspect.cleandoc("""
