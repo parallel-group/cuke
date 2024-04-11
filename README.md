@@ -49,11 +49,15 @@ def is_in(x, li):
     return inline(src, [('F', found)], [('X', x), ('LI', li), ('LSIZE', li._size()[0])])
 
 def intersect(a, b):
-    #We create an apply operator, a is the input and c is the output.
+    #We create an apply operator, a is the input and cond is the output.
     #The 'apply' operator invokes the 'is_in' function for each element of 'a'.
-    #c has the same size as a, and stores the result of the is_in function for each element of a in the corresponding position.
-    c = a.apply(lambda x: is_in(x, b))
-    return a.apply(lambda x: x, cond=c)
+    #The cond has the same size as a, and stores the result of the is_in function for each element of a in the corresponding position.
+    cond = a.apply(lambda x: is_in(x, b))
+    #We creats an conditional apply opearator.
+    #For each element 'x' of a(x=a[i], i is the iterator), if cond[i] is true, we make an assignment c[csize++]=a[i].
+    #The size of c(csize) is not the same as a 
+    c = a.apply(lambda x: x, cond=cond)
+    return c
 
 A = Tensor((10, ))
 B = Tensor((20, ))
