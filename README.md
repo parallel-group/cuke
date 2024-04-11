@@ -19,11 +19,45 @@ You can also use ``python setup.py install`` to install cuke
 
 
 ## Usage
+**An example of elementwise add**
+```python
+import cuke.codegen as codegen
+from cuke.asg import *
+from cuke.asg2ir import gen_ir
 
-TODO (Yihua): 1) add a simple example: A + B to show how to import the Tensor classes in asg.py...
+#Create two tensor nodes: A and B
+A = Tensor((10, ))
+B = Tensor((10, ))
 
-2) add an example of set intersection using cond apply
+#Create an elementwise add operator.
+#A and B are the input nodes, res is the output node. 
+res = A + B
 
+#Now we get an ASG of three tensor nodes.
+#`gen_ir` invokes the asg->ir procedure and `print_cpp` returns the generated C++ code. 
+code = codegen.cpu.print_cpp(gen_ir(res))
+print(code)
+```
+**An example of set intersection using cond apply**
+ ```python
+def is_in(x, li):
+    src = inspect.cleandoc("""
+    F = BinarySearch(LI, 0, LSIZE, X);
+    """)
+    found = Var(dtype='int')
+    found.attr['is_arg'] = False
+    return inline(src, [('F', found)], [('X', x), ('LI', li), ('LSIZE', li._size()[0])])
+
+def intersect(a, b):
+    c = a.apply(lambda x: is_in(x, b))
+    return a.apply(lambda x: x, cond=c)
+
+A = Tensor((10, ))
+B = Tensor((20, ))
+res = intersect(A, B)
+code = codegen.cpu.print_cpp(gen_ir(res))
+print(code)
+ ```
 
 More examples can be found in the ``apps`` folder. 
 
