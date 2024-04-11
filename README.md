@@ -19,15 +19,22 @@ You can also use ``python setup.py install`` to install cuke
 
 
 ## Usage
-**A simple tensor add example: A + B**
+**An example of elementwise add**
 ```python
 import cuke.codegen as codegen
 from cuke.asg import *
 from cuke.asg2ir import gen_ir
 
+#Create two tensor nodes: A and B
 A = Tensor((10, ))
 B = Tensor((10, ))
-res = A+B
+
+#Create an elementwise add operator.
+#A and B are the input nodes, res is the output node. 
+res = A + B
+
+#Now we get an ASG of three tensor nodes.
+#gen_ir invokes the asg->ir procedure and print_cpp return the generated C++ code. 
 code = codegen.cpu.print_cpp(gen_ir(res))
 print(code)
 ```
