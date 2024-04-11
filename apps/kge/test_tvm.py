@@ -3,7 +3,7 @@ from tvm import relay, te
 from tvm.contrib import graph_executor
 import torch
 import argparse
-from apps.kge.data import *
+from data import *
 
 parser = argparse.ArgumentParser(description="test on pytorch")
 

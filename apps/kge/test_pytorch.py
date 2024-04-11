@@ -1,5 +1,5 @@
 import torch
-from apps.kge.data import *
+from data import *
 
 import argparse
 parser = argparse.ArgumentParser(description="test on pytorch")

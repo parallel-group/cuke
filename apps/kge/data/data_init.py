@@ -1,4 +1,4 @@
-from apps.kge.data import *
+from data import *
 import torch
 
 def init_embddings(args, dataset):
