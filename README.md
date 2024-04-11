@@ -49,6 +49,9 @@ def is_in(x, li):
     return inline(src, [('F', found)], [('X', x), ('LI', li), ('LSIZE', li._size()[0])])
 
 def intersect(a, b):
+    #We create an apply operator, a is the input and c is the output.
+    #The 'apply' operator invokes the 'is_in' function for each element of 'a'.
+    #c has the same size as a, and stores the result of the is_in function for each element of a in the corresponding position.
     c = a.apply(lambda x: is_in(x, b))
     return a.apply(lambda x: x, cond=c)
 
