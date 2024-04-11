@@ -1,7 +1,8 @@
-from codegen import *
-from ir import *
-from asg import *
-from asg2ir import gen_ir
+# from codegen import *
+# from ir import *
+# from asg import *
+# from asg2ir import gen_ir
+from ..ir import *
 
 class GridDimy(DObject):
     def __init__(self, dtype='int', size=[]):

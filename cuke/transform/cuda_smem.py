@@ -1,10 +1,8 @@
-import transform
-from helpers import ASGTraversal, IRTraversal, get_obj, replace_all_ref, same_object, flatten, get_loops_at_level
-from asg import *
-from ir import *
-import codegen
-from asg2ir import gen_ir
-from codegen.gpu_instruction_set import *
+from ..helpers import ASGTraversal, IRTraversal, get_obj, replace_all_ref, same_object, flatten, get_loops_at_level
+from ..asg import *
+from ..ir import *
+from ..asg2ir import gen_ir
+from ..codegen.gpu_instruction_set import *
 import copy
 
 def _same_object(a, b):

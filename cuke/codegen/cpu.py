@@ -1,10 +1,9 @@
-import transform
-from helpers import collect_ir, get_input_nodes
+from .. import transform
+from ..helpers import collect_ir, get_input_nodes
 import random
 import string
 import os
-import asg
-import ir
+from .. import asg, ir
 
 #https://github.com/pytorch/pytorch/blob/main/torch/csrc/api/include/torch/types.h
 type_map = {'int': 'kInt', 
@@ -22,20 +21,19 @@ def get_dtype(expr):
         return 'int64_t'
 
 def to_string(stmt):
-    match stmt.__class__.__name__:
-        case 'Expr':
+    if isinstance(stmt, ir.Expr):
             if stmt.op in asg.arith_op.values():
                 return f"({to_string(stmt.left)}" + f" {stmt.op} " + f"{to_string(stmt.right)})"
             elif stmt.op == 'bigger':
                 return f"({to_string(stmt.left)} > {to_string(stmt.right)} ? ({to_string(stmt.left)}) : ({to_string(stmt.right)}))"
             elif stmt.op == 'smaller':
                 return f"({to_string(stmt.left)} < {to_string(stmt.right)} ? ({to_string(stmt.left)}) : ({to_string(stmt.right)}))"
-        case 'Assignment':
+    elif isinstance(stmt, ir.Assignment):
             if stmt.op is None:
                 return f"{to_string(stmt.lhs)} = {to_string(stmt.rhs)};\n"
             else:
                 return f"{to_string(stmt.lhs)} {stmt.op}= {to_string(stmt.rhs)};\n"
-        case 'Loop':
+    elif isinstance(stmt, ir.Loop):
             code = ''
             if stmt.attr['ptype'] in ['naive', 'reduction'] and 'plevel' in stmt.attr and 'nprocs' in stmt.attr:
                 code += f"#pragma omp parallel for num_threads({stmt.attr['nprocs'][stmt.attr['plevel']][0]})\n"
@@ -45,7 +43,7 @@ def to_string(stmt):
                     code += to_string(e)
             code += "} \n"
             return code
-        case 'FilterLoop':
+    elif isinstance(stmt, ir.FilterLoop):
             code = ''
             if stmt.attr['ptype'] == 'naive' and 'plevel' in stmt.attr and 'nprocs' in stmt.attr:
                 code += f"#pragma omp parallel for num_threads({stmt.attr['nprocs'][stmt.attr['plevel']][0]})\n"
@@ -60,11 +58,11 @@ def to_string(stmt):
             code += "} \n"
             code += "} \n"
             return code
-        case 'Scalar' | 'Ndarray':
+    elif isinstance(stmt, (ir.Scalar, ir.Ndarray)):
             return stmt.name()
-        case 'Literal':
+    elif isinstance(stmt, ir.Literal):
             return str(stmt.val)
-        case 'Indexing':
+    elif isinstance(stmt, ir.Indexing):
             if type(stmt.dobject) == ir.Slice:
                 if stmt.dobject.step == 1 or (type(stmt.dobject.step) == ir.Literal and stmt.dobject.step.val == 1):
                     if stmt.dobject.start == 0 or (type(stmt.dobject.start) == ir.Literal and stmt.dobject.start.val == 0):
@@ -78,7 +76,7 @@ def to_string(stmt):
                         return f'(({to_string(stmt.dobject.start)})+({to_string(stmt.dobject.step)})*({to_string(stmt.idx)}))'
             else:
                 return f'{to_string(stmt.dobject)}[{to_string(stmt.idx)}]'
-        case 'Decl':
+    elif isinstance(stmt, ir.Decl):
             # variables are passed in as pytorch arguments
             if type(stmt.dobject) == ir.Scalar:
                 if not stmt.dobject.attr['is_arg']:
@@ -91,21 +89,21 @@ def to_string(stmt):
                     code = f'torch::Tensor obj_{stmt.dobject.name()} = torch::empty({{{",".join([to_string(s) for s in stmt.dobject.size])}}}, at::{type_map[stmt.dobject.dtype]});\n'
                 code += f'auto {stmt.dobject.name()} = obj_{stmt.dobject.name()}.accessor<{stmt.dobject.dtype}, {len(stmt.dobject.size)}>();\n'
                 return code
-        case 'Math':
+    elif isinstance(stmt, ir.Math):
             return f"{stmt.type}({to_string(stmt.val)})"
-        case 'Code':
+    elif isinstance(stmt, ir.Code):
             code = stmt.code
             for kw in stmt.outputs:
                 code = code.replace(kw, to_string(stmt.outputs[kw]))
             for kw in stmt.inputs:
                 code = code.replace(kw, to_string(stmt.inputs[kw]))
             return code + '\n'
-        case 'list' | 'tuple':
+    elif isinstance(stmt, (list, tuple)):
             code = ''
             for s in stmt:
                 code += to_string(s)
             return code
-        case _:
+    else:
             return str(stmt)
 
 

@@ -1,9 +1,8 @@
 from __future__ import annotations
-import codegen.cpu
-from ir import *
-from asg import *
-from helpers import rebind_iterate, IRTraversal, flatten, get_loops_at_level
-from asg2ir import gen_ir
+from ..ir import *
+from ..asg import *
+from ..helpers import rebind_iterate, IRTraversal, flatten, get_loops_at_level
+from ..asg2ir import gen_ir
 
 def _replace_loop(ir, old, new):
     def action(stmt, res):

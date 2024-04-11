@@ -1,11 +1,10 @@
-import transform
-import run
-from codegen import *
-from helpers import ASGTraversal, IRTraversal, flatten, get_obj
-from transform.fuse import basic_rule, fuse_operators
-from asg import *
-from asg2ir import gen_ir
-from ir import *
+from cuke import transform, run
+from cuke.codegen import *
+from cuke.helpers import ASGTraversal, IRTraversal, flatten, get_obj
+from cuke.transform.fuse import basic_rule, fuse_operators
+from cuke.asg import *
+from cuke.asg2ir import gen_ir
+from cuke.ir import *
 import os
 
 from apps.kge.data import *
@@ -364,7 +363,7 @@ def transE():
     
     # TransE: Eemb[h] - Eemb[t] + Remb[r]
     res = vh - vt + vr
-    code = codegen.gpu.print_cuda(gen_ir(res))
+    code = gpu.print_cuda(gen_ir(res))
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
     samplers, entity_emb, relation_emb, projection_emb = get_samplers()
@@ -407,7 +406,7 @@ def transH():
 
     # TransH: Eemb[h] - Eemb[t] + Remb[r] - Pemb[r]^T * (Eemb[h] - Eemb[t]) * Pemb[r]
     res = vh - vt + vr - bsv(bvv(vp, vh - vt), vp)
-    code = codegen.gpu.print_cuda(gen_ir(res))
+    code = gpu.print_cuda(gen_ir(res))
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
     samplers, entity_emb, relation_emb, projection_emb = get_samplers()
@@ -458,7 +457,7 @@ def transR():
 
     # TransR: (Eemb[h] - Eemb[t])^T * Proj[r] + Remb[r]
     res = bvm(vh - vt, mr) + vr
-    code = codegen.gpu.print_cuda(gen_ir(res))
+    code = gpu.print_cuda(gen_ir(res))
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
     samplers, entity_emb, relation_emb, projection_emb = get_samplers()
@@ -503,7 +502,7 @@ def transF():
 
     # TransF: (Eemb[h] + Remb[r])^T * Eemb[t] + (Eemb[t] - Remb[r])^T * Eemb[h]
     res = bvv(vh+vr, vt) + bvv(vt-vr, vh)
-    code = codegen.gpu.print_cuda(gen_ir(res))
+    code = gpu.print_cuda(gen_ir(res))
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
     samplers, entity_emb, relation_emb, projection_emb = get_samplers()
@@ -551,7 +550,7 @@ def RESCAL():
 
     # RESCAL: Eemb[h]^T * Remb[r] * Eemb[t]
     res = bvv(bvm(vh, mr), vt)
-    code = codegen.gpu.print_cuda(gen_ir(res))
+    code = gpu.print_cuda(gen_ir(res))
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
     samplers, entity_emb, relation_emb, projection_emb = get_samplers()
@@ -582,7 +581,7 @@ def RESCAL():
 
 
 
-def transR():
+def neg_transR():
     # We need to define all the arguments we need for our computation
     nnodes = Var(name='nnodes')
     nedges = Var(name='nedges')
@@ -602,7 +601,7 @@ def transR():
 
     # TransR: (Eemb[h] - Eemb[t])^T * Proj[r] + Remb[r]
     res = bvm(vh - vt, mr) + vr
-    code = codegen.gpu.print_cuda(gen_ir(res))
+    code = gpu.print_cuda(gen_ir(res))
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
     samplers, entity_emb, relation_emb, projection_emb = get_samplers()
@@ -630,7 +629,7 @@ def transR():
     print('model {} on {} dataset completed! batchsize:{} dim:{}\ntotal error: {}, average time cost: {} ms'.format(args.model, args.dataset, args.batch_size, args.dim, torch.sum(torch.abs(x) - torch.abs(y)), elapsed_time_ms/100))
 
 
-def transF():
+def neg_transF():
     # We need to define all the arguments we need for our computation
     nnodes = Var(name='nnodes')
     nedges = Var(name='nedges')
@@ -648,7 +647,7 @@ def transF():
 
     # TransF: (Eemb[h] + Remb[r])^T * Eemb[t] + (Eemb[t] - Remb[r])^T * Eemb[h]
     res = bvv(vh+vr, vt) + bvv(vt-vr, vh)
-    code = codegen.gpu.print_cuda(gen_ir(res))
+    code = gpu.print_cuda(gen_ir(res))
 
     # Here our cuda code is then generated, next step is sample node indices from input graph and create embeddings to run the kernel
     samplers, entity_emb, relation_emb, projection_emb = get_samplers()

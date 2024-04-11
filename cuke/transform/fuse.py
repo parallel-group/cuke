@@ -1,9 +1,7 @@
-from asg import *
-from ir import *
-import codegen
-from helpers import get_obj, get_val, rebind_iterate, flatten_remove, ir_uses, remove_decl, clear_compute, \
+from ..asg import *
+from ..ir import *
+from ..helpers import get_obj, get_val, rebind_iterate, flatten_remove, ir_uses, remove_decl, clear_compute, \
     ir_find_defs, same_object, flatten, ASGTraversal, replace_all_ref, has_same_iteration_space, IRTraversal, ir_find_uses
-from asg2ir import gen_ir
 
 
 # TODO: reimplement this with IRTraversal
