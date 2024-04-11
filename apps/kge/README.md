@@ -154,6 +154,12 @@ bash test_fig9b.sh
 bash test_fig9c.sh
 bash test_fig9d.sh
 
+bash test_fig9a_pytorch.sh
+bash test_fig9b_pytorch.sh
+bash test_fig9c_pytorch.sh
+bash test_fig9d_pytorch.sh
+
+# make sure you have successfully installed TVM.
 bash test_fig9a_tvm.sh
 bash test_fig9b_tvm.sh
 bash test_fig9c_tvm.sh
@@ -165,6 +171,10 @@ bash test_fig9d_tvm.sh
 bash test_fig10a.sh
 bash test_fig10b.sh
 
+bash test_fig10a_pytorch.sh
+bash test_fig10b_pytorch.sh
+
+# make sure you have successfully installed TVM.
 bash test_fig10a_tvm.sh
 bash test_fig10b_tvm.sh
 ```
