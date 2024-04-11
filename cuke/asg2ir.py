@@ -1,8 +1,8 @@
 from __future__ import annotations
 import copy
-import ir
-import asg
-import helpers
+from . import ir
+from . import asg
+from . import helpers
 
 
 def num_unbind(index):

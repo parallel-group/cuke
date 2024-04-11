@@ -1,11 +1,10 @@
-import transform
-import run
-from codegen import *
-from helpers import ASGTraversal, IRTraversal, flatten, get_obj
-from transform.fuse import basic_rule, fuse_operators
-from asg import *
-from asg2ir import gen_ir
-from ir import *
+from ... import transform, run
+from ...codegen import *
+from ...helpers import ASGTraversal, IRTraversal, flatten, get_obj
+from ...transform.fuse import basic_rule, fuse_operators
+from ...asg import *
+from ...asg2ir import gen_ir
+from ...ir import *
 import os
 
 import torch
@@ -272,7 +271,7 @@ def transE():
     # TransE: Eemb[h] - Eemb[t] + Remb[r]
     res = vh - vt + vr
     # code = codegen.cpu.print_cpp(gen_ir(res))
-    code = codegen.gpu.print_cuda(gen_ir(res))
+    code = gpu.print_cuda(gen_ir(res))
     print(code)
 
 

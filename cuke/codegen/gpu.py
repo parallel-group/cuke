@@ -1,15 +1,13 @@
-import transform
-from helpers import collect_ir, get_input_nodes, ASGTraversal, IRTraversal, replace_all_ref, ir_find_defs, ir_find_uses
+from .. import transform
+from .. import asg, ir
+from ..helpers import collect_ir, get_input_nodes, ASGTraversal, IRTraversal, replace_all_ref, ir_find_defs, ir_find_uses
 import random
 import string
 import os
-import asg
-import ir
-import codegen
-from codegen.gpu_instruction_set import *
+from .gpu_instruction_set import *
 
 def to_string(stmt):
-    if isinstance(stmt, ir.Expr):
+    if isinstance(stmt, Expr):
         if stmt.op in asg.arith_op.values():
             return f"({to_string(stmt.left)}" + f" {stmt.op} " + f"{to_string(stmt.right)})"
         elif stmt.op == 'bigger':
@@ -20,12 +18,12 @@ def to_string(stmt):
             return f"({to_string(stmt.left)} ? {to_string(stmt.right)} : {to_string(stmt.optional)})"
         else:
             return f"({to_string(stmt.left)}" + f" {stmt.op} " + f"{to_string(stmt.right)})"
-    elif isinstance(stmt, ir.Assignment):
+    elif isinstance(stmt, Assignment):
             if stmt.op is None:
                 return f"{to_string(stmt.lhs)} = {to_string(stmt.rhs)};\n"
             else:
                 return f"{to_string(stmt.lhs)} {stmt.op}= {to_string(stmt.rhs)};\n"
-    elif isinstance(stmt, ir.Loop):
+    elif isinstance(stmt, Loop):
             code = ''
             if stmt.attr['ptype'] in ['naive', 'reduction'] and 'plevel' in stmt.attr and 'nprocs' in stmt.attr:
                 code += f"for (int {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
@@ -60,34 +58,34 @@ def to_string(stmt):
             if 'sync' in stmt.attr:
                 code += '__syncthreads();\n'
             return code
-    elif isinstance(stmt, (ir.Scalar, ir.Ndarray)):
+    elif isinstance(stmt, (Scalar, Ndarray)):
             if 'offset' in stmt.attr:
                 return f'{stmt.name()}-{to_string(stmt.attr["offset"])}'
             return stmt.name()
-    elif isinstance(stmt, ir.Literal):
+    elif isinstance(stmt, Literal):
             return str(stmt.val)
-    elif isinstance(stmt, ir.Indexing):
-            if type(stmt.dobject) == ir.Slice:
-                if stmt.dobject.step == 1 or (type(stmt.dobject.step) == ir.Literal and stmt.dobject.step.val == 1):
-                    if stmt.dobject.start == 0 or (type(stmt.dobject.start) == ir.Literal and stmt.dobject.start.val == 0):
+    elif isinstance(stmt, Indexing):
+            if type(stmt.dobject) == Slice:
+                if stmt.dobject.step == 1 or (type(stmt.dobject.step) == Literal and stmt.dobject.step.val == 1):
+                    if stmt.dobject.start == 0 or (type(stmt.dobject.start) == Literal and stmt.dobject.start.val == 0):
                         return f'({to_string(stmt.idx)})'
                     else:
                         return f'(({to_string(stmt.dobject.start)})+({to_string(stmt.idx)}))'
                 else:
-                    if stmt.dobject.start == 0 or (type(stmt.dobject.start) == ir.Literal and stmt.dobject.start.val == 0):
+                    if stmt.dobject.start == 0 or (type(stmt.dobject.start) == Literal and stmt.dobject.start.val == 0):
                         return f'(({to_string(stmt.dobject.step)})*({to_string(stmt.idx)}))'
                     else:
                         return f'(({to_string(stmt.dobject.start)})+({to_string(stmt.dobject.step)})*({to_string(stmt.idx)}))'
             else:
                 return f'{to_string(stmt.dobject)}[{to_string(stmt.idx)}]'
-    elif isinstance(stmt, ir.Decl):
+    elif isinstance(stmt, Decl):
             # variables are passed in as pytorch arguments
-            if type(stmt.dobject) == ir.Scalar:
+            if type(stmt.dobject) == Scalar:
                 if not stmt.dobject.attr['is_arg']:
                     return f"{stmt.dobject.dtype} {stmt.dobject.name()};\n"
                 else:
                     return ''
-            elif type(stmt.dobject) == ir.Ndarray:
+            elif type(stmt.dobject) == Ndarray:
                 code = ''
                 if not stmt.dobject.attr['is_arg']:
                     if 'mem_layer' in stmt.dobject.attr and stmt.dobject.attr['mem_layer'] == 'smem':
@@ -101,8 +99,8 @@ def to_string(stmt):
             else:
                 return f'{to_string(stmt.dobject)}'
     elif isinstance(stmt, (ThreadIdx, ThreadIdy, BlockDimx, BlockDimy, BlockIdx, BlockIdy, GridDimx, GridDimy, SyncThreads, SyncWarps)):
-            return codegen.gpu_instruction_set.ir2gpu(stmt)
-    elif isinstance(stmt, ir.Math):
+            return ir2gpu(stmt)
+    elif isinstance(stmt, Math):
             if isinstance(stmt.val, (list, tuple)):
                 vals = f'{to_string(stmt.val[0])}'
                 for i in range(1, len(stmt.val)):
@@ -110,7 +108,7 @@ def to_string(stmt):
                 return f"{stmt.type}({vals})"
             else:
                 return f"{stmt.type}({to_string(stmt.val)})"
-    elif isinstance(stmt, ir.Code):
+    elif isinstance(stmt, Code):
             code = stmt.code
             code = code.replace(stmt.output[0], to_string(stmt.output[1]))
             for kw in stmt.inputs:
@@ -230,7 +228,7 @@ def print_cuda(node):
     else:
         rtype = 'void'
 
-    with open('codegen/gpu_template.cu', 'r') as f:
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gpu_template.cu'), 'r') as f:
         c_code = f.read()
         for i in mapping:
             c_code = c_code.replace(i, str(mapping[i]))

@@ -1,7 +1,7 @@
 from __future__ import annotations
-import ir
-import asg
-import asg2ir
+from . import ir
+from . import asg
+from . import asg2ir
 
 def same_object(a, b):
     # aid = None
