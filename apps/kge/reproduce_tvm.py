@@ -3,6 +3,7 @@ from tvm import relay, te
 from tvm.contrib import graph_executor
 import torch
 import argparse
+from apps.kge.data import *
 
 parser = argparse.ArgumentParser(description="test on pytorch")
 
@@ -114,19 +115,11 @@ def transE_neg(EMB, RELEMB, VH, VT, VR):
 
 
 def TransE_tvm(batchsize, dim):
-    eemb = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransE_l1/eemb_{dataset}_{batchsize}_{dim}.pt')
-    remb = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransE_l1/remb_{dataset}_{batchsize}_{dim}.pt')
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
-    heads = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransE_l1/heads_{dataset}_{batchsize}_{dim}.pt')
-    tails = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransE_l1/tails_{dataset}_{batchsize}_{dim}.pt')
-    relations = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransE_l1/relations_{dataset}_{batchsize}_{dim}.pt')
-
-    neg_heads = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/TransE_l1/heads_{dataset}_{batchsize}_{dim}.pt')
-    neg_tails = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/TransE_l1/tails_{dataset}_{batchsize}_{dim}.pt')
-    neg_relations = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/TransE_l1/relations_{dataset}_{batchsize}_{dim}.pt')
-
-    nrel = remb.shape[0]
-    nnodes = eemb.shape[0]
+    nrel = relation_emb.shape[0]
+    nnodes = entity_emb.shape[0]
 
     EMB = relay.var('emb', shape=(nnodes, dim), dtype='float32')
     RELEMB = relay.var('relemb', shape=(nrel, dim), dtype='float32')
@@ -138,11 +131,11 @@ def TransE_tvm(batchsize, dim):
     func = relay.Function(relay.analysis.free_vars(act), act)
     mod = tvm.IRModule.from_expr(func)
 
-    temb = tvm.nd.array(eemb)
-    trelemb = tvm.nd.array(remb)
-    tvh = tvm.nd.array(heads)
-    tvt = tvm.nd.array(tails)
-    tvr = tvm.nd.array(relations)
+    temb = tvm.nd.array(entity_emb)
+    trelemb = tvm.nd.array(relation_emb)
+    tvh = tvm.nd.array(head_ids)
+    tvt = tvm.nd.array(tail_ids)
+    tvr = tvm.nd.array(rel_ids)
 
     params = {}
     with tvm.transform.PassContext(opt_level=3):
@@ -153,54 +146,15 @@ def TransE_tvm(batchsize, dim):
     m.set_input("vh", tvh)
     m.set_input("vt", tvt)
     m.set_input("vr", tvr)
-    print(lib.lib.imported_modules[0].get_source())
     print(m.benchmark(dev, number=1, repeat=1))
     pos_score = torch.from_numpy(m.get_output(0).asnumpy())
 
-    VH = relay.var('vh', shape=(batchsize,), dtype='int64')
-    VT = relay.var('vt', shape=(batchsize, 64), dtype='int64')
-    VR = relay.var('vr', shape=(batchsize,), dtype='int64')
-
-    act = transE_neg(EMB, RELEMB, VH,VT, VR)
-    func = relay.Function(relay.analysis.free_vars(act), act)
-    mod = tvm.IRModule.from_expr(func)
-
-    temb = tvm.nd.array(eemb)
-    trelemb = tvm.nd.array(remb)
-    tvh = tvm.nd.array(neg_heads)
-    tvt = tvm.nd.array(neg_tails)
-    tvr = tvm.nd.array(neg_relations)
-
-    params = {}
-    with tvm.transform.PassContext(opt_level=3):
-        lib = relay.build(func, target=target, params=params)
-    m = graph_executor.GraphModule(lib['default'](dev))
-    m.set_input('emb', temb)
-    m.set_input('relemb', trelemb)
-    m.set_input("vh", tvh)
-    m.set_input("vt", tvt)
-    m.set_input("vr", tvr)
-
-    print(m.benchmark(dev, number=1, repeat=1))
-    neg_score = torch.from_numpy(m.get_output(0).asnumpy())
-
-    print(pos_score.shape, neg_score.shape)
-
 def TransR_tvm(batchsize, dim):
-    eemb = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransR/eemb_{dataset}_{batchsize}_{dim}.pt')
-    remb = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransR/remb_{dataset}_{batchsize}_{dim}.pt')
-    pemb = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransR/pemb_{dataset}_{batchsize}_{dim}.pt')
-    
-    heads = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransR/heads_{dataset}_{batchsize}_{dim}.pt')
-    tails = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransR/tails_{dataset}_{batchsize}_{dim}.pt')
-    relations = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransR/relations_{dataset}_{batchsize}_{dim}.pt')
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
-    neg_heads = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/TransR/heads_{dataset}_{batchsize}_{dim}.pt')
-    neg_tails = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/TransR/tails_{dataset}_{batchsize}_{dim}.pt')
-    neg_relations = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/TransR/relations_{dataset}_{batchsize}_{dim}.pt')
-
-    nrel = remb.shape[0]
-    nnodes = eemb.shape[0]
+    nrel = relation_emb.shape[0]
+    nnodes = entity_emb.shape[0]
 
     PROJ = relay.var('proj', shape=(nrel, dim, dim), dtype='float32')
     EMB = relay.var('emb', shape=(nnodes, 1, dim), dtype='float32')
@@ -213,12 +167,12 @@ def TransR_tvm(batchsize, dim):
     func = relay.Function(relay.analysis.free_vars(act), act)
     mod = tvm.IRModule.from_expr(func)
 
-    tproj = tvm.nd.array(pemb)
-    temb = tvm.nd.array(eemb)
-    trelemb = tvm.nd.array(remb)
-    tvh = tvm.nd.array(heads)
-    tvt = tvm.nd.array(tails)
-    tvr = tvm.nd.array(relations)
+    tproj = tvm.nd.array(projection_emb)
+    temb = tvm.nd.array(entity_emb)
+    trelemb = tvm.nd.array(relation_emb)
+    tvh = tvm.nd.array(head_ids)
+    tvt = tvm.nd.array(tail_ids)
+    tvr = tvm.nd.array(rel_ids)
 
     params = {}
 
@@ -232,54 +186,16 @@ def TransR_tvm(batchsize, dim):
     m.set_input("vt", tvt)
     m.set_input("vr", tvr)
     
-    # print(lib.lib.imported_modules[0].get_source())
     print(m.benchmark(dev, number=1, repeat=1))
     pos_score = torch.from_numpy(m.get_output(0).asnumpy())
-    
 
-    VH = relay.var('vh', shape=(batchsize,), dtype='int64')
-    VT = relay.var('vt', shape=(batchsize * 64, ), dtype='int64')
-    VR = relay.var('vr', shape=(batchsize,), dtype='int64')
-    act = transR_neg(PROJ, EMB, RELEMB, VH,VT, VR)
-    func = relay.Function(relay.analysis.free_vars(act), act)
-    mod = tvm.IRModule.from_expr(func)
-    tproj = tvm.nd.array(pemb)
-    temb = tvm.nd.array(eemb)
-    trelemb = tvm.nd.array(remb)
-    tvh = tvm.nd.array(neg_heads)
-    tvt = tvm.nd.array(neg_tails)
-    tvr = tvm.nd.array(neg_relations)
-
-    params = {}
-    with tvm.transform.PassContext(opt_level=3):
-        lib = relay.build(func, target=target, params=params)
-    m = graph_executor.GraphModule(lib['default'](dev))
-    m.set_input('proj', tproj)
-    m.set_input('emb', temb)
-    m.set_input('relemb', trelemb)
-    m.set_input("vh", tvh)
-    m.set_input("vt", tvt)
-    m.set_input("vr", tvr)
-
-    print(m.benchmark(dev, number=1, repeat=1))
-    neg_score = torch.from_numpy(m.get_output(0).asnumpy())
-
-    print(pos_score.shape, neg_score.shape)
 
 def RESCAL_tvm(batchsize, dim):
-    eemb = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/RESCAL/eemb_{dataset}_{batchsize}_{dim}.pt')
-    remb = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/RESCAL/remb_{dataset}_{batchsize}_{dim}.pt')
-    
-    heads = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/RESCAL/heads_{dataset}_{batchsize}_{dim}.pt')
-    tails = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/RESCAL/tails_{dataset}_{batchsize}_{dim}.pt')
-    relations = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/RESCAL/relations_{dataset}_{batchsize}_{dim}.pt')
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
-    neg_heads = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/RESCAL/heads_{dataset}_{batchsize}_{dim}.pt')
-    neg_tails = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/RESCAL/tails_{dataset}_{batchsize}_{dim}.pt')
-    neg_relations = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/RESCAL/relations_{dataset}_{batchsize}_{dim}.pt')
-
-    nrel = remb.shape[0]
-    nnodes = eemb.shape[0]
+    nrel = relation_emb.shape[0]
+    nnodes = entity_emb.shape[0]
     EMB = relay.var('emb', shape=(nnodes, 1, dim), dtype='float32')
     RELEMB = relay.var('relemb', shape=(nrel, dim, dim), dtype='float32')
     VH = relay.var('vh', shape=(batchsize,), dtype='int64')
@@ -289,11 +205,11 @@ def RESCAL_tvm(batchsize, dim):
     func = relay.Function(relay.analysis.free_vars(act), act)
     mod = tvm.IRModule.from_expr(func)
 
-    temb = tvm.nd.array(eemb)
-    trelemb = tvm.nd.array(remb)
-    tvh = tvm.nd.array(heads)
-    tvt = tvm.nd.array(tails)
-    tvr = tvm.nd.array(relations)
+    temb = tvm.nd.array(entity_emb)
+    trelemb = tvm.nd.array(relation_emb)
+    tvh = tvm.nd.array(head_ids)
+    tvt = tvm.nd.array(tail_ids)
+    tvr = tvm.nd.array(rel_ids)
 
     params = {}
     with tvm.transform.PassContext(opt_level=3):
@@ -308,49 +224,12 @@ def RESCAL_tvm(batchsize, dim):
     print(m.benchmark(dev, number=1, repeat=1))
     pos_score = torch.from_numpy(m.get_output(0).asnumpy())
 
-    VH = relay.var('vh', shape=(batchsize,), dtype='int64')
-    VT = relay.var('vt', shape=(batchsize*64,), dtype='int64')
-    VR = relay.var('vr', shape=(batchsize,), dtype='int64')
-    act = RESCAL_neg(EMB, RELEMB, VH, VT, VR)
-    func = relay.Function(relay.analysis.free_vars(act), act)
-    mod = tvm.IRModule.from_expr(func)
-
-    temb = tvm.nd.array(eemb)
-    trelemb = tvm.nd.array(remb)
-    tvh = tvm.nd.array(neg_heads)
-    tvt = tvm.nd.array(neg_tails)
-    tvr = tvm.nd.array(neg_relations)
-
-    params = {}
-    with tvm.transform.PassContext(opt_level=3):
-        lib = relay.build(func, target=target, params=params)
-    m = graph_executor.GraphModule(lib['default'](dev))
-    m.set_input('emb', temb)
-    m.set_input('relemb', trelemb)
-    m.set_input("vh", tvh)
-    m.set_input("vt", tvt)
-    m.set_input("vr", tvr)
-
-    print(m.benchmark(dev, number=1, repeat=1))
-    neg_score = torch.from_numpy(m.get_output(0).asnumpy())
-
-    print(pos_score.shape, neg_score.shape)
-
 def TransH_tvm(batchsize, dim):
-    eemb = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransH/eemb_{dataset}_{batchsize}_{dim}.pt')
-    remb = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransH/remb_{dataset}_{batchsize}_{dim}.pt')
-    pemb = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransH/pemb_{dataset}_{batchsize}_{dim}.pt')
-    
-    heads = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransH/heads_{dataset}_{batchsize}_{dim}.pt')
-    tails = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransH/tails_{dataset}_{batchsize}_{dim}.pt')
-    relations = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransH/relations_{dataset}_{batchsize}_{dim}.pt')
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
-    neg_heads = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/TransH/heads_{dataset}_{batchsize}_{dim}.pt')
-    neg_tails = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/TransH/tails_{dataset}_{batchsize}_{dim}.pt')
-    neg_relations = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/TransH/relations_{dataset}_{batchsize}_{dim}.pt')
-
-    nrel = remb.shape[0]
-    nnodes = eemb.shape[0]
+    nrel = relation_emb.shape[0]
+    nnodes = entity_emb.shape[0]
     PROJ = relay.var('proj', shape=(nrel, dim), dtype='float32')
     EMB = relay.var('emb', shape=(nnodes, dim), dtype='float32')
     RELEMB = relay.var('relemb', shape=(nrel, dim), dtype='float32')
@@ -361,12 +240,12 @@ def TransH_tvm(batchsize, dim):
     act = transH(PROJ, EMB, RELEMB, VH,VT, VR)
     func = relay.Function(relay.analysis.free_vars(act), act)
     mod = tvm.IRModule.from_expr(func)
-    tproj = tvm.nd.array(pemb)
-    temb = tvm.nd.array(eemb)
-    trelemb = tvm.nd.array(remb)
-    tvh = tvm.nd.array(heads)
-    tvt = tvm.nd.array(tails)
-    tvr = tvm.nd.array(relations)
+    tproj = tvm.nd.array(projection_emb)
+    temb = tvm.nd.array(entity_emb)
+    trelemb = tvm.nd.array(relation_emb)
+    tvh = tvm.nd.array(head_ids)
+    tvt = tvm.nd.array(tail_ids)
+    tvr = tvm.nd.array(rel_ids)
 
     params = {}
     with tvm.transform.PassContext(opt_level=3):
@@ -378,54 +257,16 @@ def TransH_tvm(batchsize, dim):
     m.set_input("vh", tvh)
     m.set_input("vt", tvt)
     m.set_input("vr", tvr)
-    print(lib.lib.imported_modules[0].get_source())
+    
     print(m.benchmark(dev, number=1, repeat=1))
     pos_score = torch.from_numpy(m.get_output(0).asnumpy())
 
-
-    VH = relay.var('vh', shape=(batchsize,), dtype='int64')
-    VT = relay.var('vt', shape=(batchsize * 64, ), dtype='int64')
-    VR = relay.var('vr', shape=(batchsize,), dtype='int64')
-    act = transH_neg(PROJ, EMB, RELEMB, VH,VT, VR)
-    func = relay.Function(relay.analysis.free_vars(act), act)
-    mod = tvm.IRModule.from_expr(func)
-    tproj = tvm.nd.array(pemb)
-    temb = tvm.nd.array(eemb)
-    trelemb = tvm.nd.array(remb)
-    tvh = tvm.nd.array(neg_heads)
-    tvt = tvm.nd.array(neg_tails)
-    tvr = tvm.nd.array(neg_relations)
-
-    params = {}
-    with tvm.transform.PassContext(opt_level=3):
-        lib = relay.build(func, target=target, params=params)
-    m = graph_executor.GraphModule(lib['default'](dev))
-    m.set_input('proj', tproj)
-    m.set_input('emb', temb)
-    m.set_input('relemb', trelemb)
-    m.set_input("vh", tvh)
-    m.set_input("vt", tvt)
-    m.set_input("vr", tvr)
-
-    print(m.benchmark(dev, number=1, repeat=1))
-    neg_score = torch.from_numpy(m.get_output(0).asnumpy())
-
-    print(pos_score.shape, neg_score.shape)
-
 def TransF_tvm(batchsize, dim):
-    eemb = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransF/eemb_{dataset}_{batchsize}_{dim}.pt')
-    remb = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransF/remb_{dataset}_{batchsize}_{dim}.pt')
-    
-    heads = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransF/heads_{dataset}_{batchsize}_{dim}.pt')
-    tails = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransF/tails_{dataset}_{batchsize}_{dim}.pt')
-    relations = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/TransF/relations_{dataset}_{batchsize}_{dim}.pt')
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
-    neg_heads = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/TransF/heads_{dataset}_{batchsize}_{dim}.pt')
-    neg_tails = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/TransF/tails_{dataset}_{batchsize}_{dim}.pt')
-    neg_relations = torch.load(f'/data/not_backed_up/lihhu/KGEembeddings/neg/TransF/relations_{dataset}_{batchsize}_{dim}.pt')
-
-    nrel = remb.shape[0]
-    nnodes = eemb.shape[0]
+    nrel = relation_emb.shape[0]
+    nnodes = entity_emb.shape[0]
 
     EMB = relay.var('emb', shape=(nnodes, dim), dtype='float32')
     RELEMB = relay.var('relemb', shape=(nrel, dim), dtype='float32')
@@ -436,11 +277,11 @@ def TransF_tvm(batchsize, dim):
     func = relay.Function(relay.analysis.free_vars(act), act)
     mod = tvm.IRModule.from_expr(func)
 
-    temb = tvm.nd.array(eemb)
-    trelemb = tvm.nd.array(remb)
-    tvh = tvm.nd.array(heads)
-    tvt = tvm.nd.array(tails)
-    tvr = tvm.nd.array(relations)
+    temb = tvm.nd.array(entity_emb)
+    trelemb = tvm.nd.array(relation_emb)
+    tvh = tvm.nd.array(head_ids)
+    tvt = tvm.nd.array(tail_ids)
+    tvr = tvm.nd.array(rel_ids)
 
     params = {}
     with tvm.transform.PassContext(opt_level=3):
@@ -451,11 +292,162 @@ def TransF_tvm(batchsize, dim):
     m.set_input("vh", tvh)
     m.set_input("vt", tvt)
     m.set_input("vr", tvr)
-    print(lib.lib.imported_modules[0].get_source())
+    
     print(m.benchmark(dev, number=1, repeat=1))
     pos_score = torch.from_numpy(m.get_output(0).asnumpy())
+    
+def neg_TransE_tvm(batchsize, dim):
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
 
+    nrel = relation_emb.shape[0]
+    nnodes = entity_emb.shape[0]
 
+    EMB = relay.var('emb', shape=(nnodes, dim), dtype='float32')
+    RELEMB = relay.var('relemb', shape=(nrel, dim), dtype='float32')
+    VH = relay.var('vh', shape=(batchsize,), dtype='int64')
+    VT = relay.var('vt', shape=(batchsize, 64), dtype='int64')
+    VR = relay.var('vr', shape=(batchsize,), dtype='int64')
+
+    act = transE_neg(EMB, RELEMB, VH,VT, VR)
+    func = relay.Function(relay.analysis.free_vars(act), act)
+    mod = tvm.IRModule.from_expr(func)
+
+    temb = tvm.nd.array(entity_emb)
+    trelemb = tvm.nd.array(relation_emb)
+    tvh = tvm.nd.array(head_ids)
+    tvt = tvm.nd.array(neg_tail_ids)
+    tvr = tvm.nd.array(rel_ids)
+
+    params = {}
+    with tvm.transform.PassContext(opt_level=3):
+        lib = relay.build(func, target=target, params=params)
+    m = graph_executor.GraphModule(lib['default'](dev))
+    m.set_input('emb', temb)
+    m.set_input('relemb', trelemb)
+    m.set_input("vh", tvh)
+    m.set_input("vt", tvt)
+    m.set_input("vr", tvr)
+
+    print(m.benchmark(dev, number=1, repeat=1))
+    neg_score = torch.from_numpy(m.get_output(0).asnumpy())
+
+def neg_TransR_tvm(batchsize, dim):
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
+
+    nrel = relation_emb.shape[0]
+    nnodes = entity_emb.shape[0]
+
+    PROJ = relay.var('proj', shape=(nrel, dim, dim), dtype='float32')
+    EMB = relay.var('emb', shape=(nnodes, 1, dim), dtype='float32')
+    RELEMB = relay.var('relemb', shape=(nrel, 1, dim), dtype='float32')
+    VH = relay.var('vh', shape=(batchsize,), dtype='int64')
+    VT = relay.var('vt', shape=(batchsize * 64, ), dtype='int64')
+    VR = relay.var('vr', shape=(batchsize,), dtype='int64')
+    act = transR_neg(PROJ, EMB, RELEMB, VH,VT, VR)
+    func = relay.Function(relay.analysis.free_vars(act), act)
+    mod = tvm.IRModule.from_expr(func)
+    tproj = tvm.nd.array(projection_emb)
+    temb = tvm.nd.array(entity_emb)
+    trelemb = tvm.nd.array(relation_emb)
+    tvh = tvm.nd.array(head_ids)
+    tvt = tvm.nd.array(neg_tail_ids)
+    tvr = tvm.nd.array(rel_ids)
+
+    params = {}
+    with tvm.transform.PassContext(opt_level=3):
+        lib = relay.build(func, target=target, params=params)
+    m = graph_executor.GraphModule(lib['default'](dev))
+    m.set_input('proj', tproj)
+    m.set_input('emb', temb)
+    m.set_input('relemb', trelemb)
+    m.set_input("vh", tvh)
+    m.set_input("vt", tvt)
+    m.set_input("vr", tvr)
+
+    print(m.benchmark(dev, number=1, repeat=1))
+    neg_score = torch.from_numpy(m.get_output(0).asnumpy())
+
+def neg_RESCAL_tvm(batchsize, dim):
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
+
+    nrel = relation_emb.shape[0]
+    nnodes = entity_emb.shape[0]
+    EMB = relay.var('emb', shape=(nnodes, 1, dim), dtype='float32')
+    RELEMB = relay.var('relemb', shape=(nrel, dim, dim), dtype='float32')
+    VH = relay.var('vh', shape=(batchsize,), dtype='int64')
+    VT = relay.var('vt', shape=(batchsize*64,), dtype='int64')
+    VR = relay.var('vr', shape=(batchsize,), dtype='int64')
+    act = RESCAL_neg(EMB, RELEMB, VH, VT, VR)
+    func = relay.Function(relay.analysis.free_vars(act), act)
+    mod = tvm.IRModule.from_expr(func)
+
+    temb = tvm.nd.array(entity_emb)
+    trelemb = tvm.nd.array(relation_emb)
+    tvh = tvm.nd.array(head_ids)
+    tvt = tvm.nd.array(neg_tail_ids)
+    tvr = tvm.nd.array(rel_ids)
+
+    params = {}
+    with tvm.transform.PassContext(opt_level=3):
+        lib = relay.build(func, target=target, params=params)
+    m = graph_executor.GraphModule(lib['default'](dev))
+    m.set_input('emb', temb)
+    m.set_input('relemb', trelemb)
+    m.set_input("vh", tvh)
+    m.set_input("vt", tvt)
+    m.set_input("vr", tvr)
+
+    print(m.benchmark(dev, number=1, repeat=1))
+    neg_score = torch.from_numpy(m.get_output(0).asnumpy())
+
+def neg_TransH_tvm(batchsize, dim):
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
+
+    nrel = relation_emb.shape[0]
+    nnodes = entity_emb.shape[0]
+    PROJ = relay.var('proj', shape=(nrel, dim), dtype='float32')
+    EMB = relay.var('emb', shape=(nnodes, dim), dtype='float32')
+    RELEMB = relay.var('relemb', shape=(nrel, dim), dtype='float32')
+    VH = relay.var('vh', shape=(batchsize,), dtype='int64')
+    VT = relay.var('vt', shape=(batchsize * 64, ), dtype='int64')
+    VR = relay.var('vr', shape=(batchsize,), dtype='int64')
+    act = transH_neg(PROJ, EMB, RELEMB, VH,VT, VR)
+    func = relay.Function(relay.analysis.free_vars(act), act)
+    mod = tvm.IRModule.from_expr(func)
+    tproj = tvm.nd.array(projection_emb)
+    temb = tvm.nd.array(entity_emb)
+    trelemb = tvm.nd.array(relation_emb)
+    tvh = tvm.nd.array(head_ids)
+    tvt = tvm.nd.array(neg_tail_ids)
+    tvr = tvm.nd.array(rel_ids)
+
+    params = {}
+    with tvm.transform.PassContext(opt_level=3):
+        lib = relay.build(func, target=target, params=params)
+    m = graph_executor.GraphModule(lib['default'](dev))
+    m.set_input('proj', tproj)
+    m.set_input('emb', temb)
+    m.set_input('relemb', trelemb)
+    m.set_input("vh", tvh)
+    m.set_input("vt", tvt)
+    m.set_input("vr", tvr)
+
+    print(m.benchmark(dev, number=1, repeat=1))
+    neg_score = torch.from_numpy(m.get_output(0).asnumpy())
+
+def neg_TransF_tvm(batchsize, dim):
+    samplers, entity_emb, relation_emb, projection_emb = get_samplers(args)
+    rel_ids, head_ids, tail_ids, neg_rel_ids, neg_head_ids, neg_tail_ids = get_indices(args, samplers)
+
+    nrel = relation_emb.shape[0]
+    nnodes = entity_emb.shape[0]
+
+    EMB = relay.var('emb', shape=(nnodes, dim), dtype='float32')
+    RELEMB = relay.var('relemb', shape=(nrel, dim), dtype='float32')
     VH = relay.var('vh', shape=(batchsize,), dtype='int64')
     VT = relay.var('vt', shape=(batchsize,64,), dtype='int64')
     VR = relay.var('vr', shape=(batchsize,), dtype='int64')
@@ -464,11 +456,11 @@ def TransF_tvm(batchsize, dim):
     func = relay.Function(relay.analysis.free_vars(act), act)
     mod = tvm.IRModule.from_expr(func)
 
-    temb = tvm.nd.array(eemb)
-    trelemb = tvm.nd.array(remb)
-    tvh = tvm.nd.array(neg_heads)
-    tvt = tvm.nd.array(neg_tails)
-    tvr = tvm.nd.array(neg_relations)
+    temb = tvm.nd.array(entity_emb)
+    trelemb = tvm.nd.array(relation_emb)
+    tvh = tvm.nd.array(head_ids)
+    tvt = tvm.nd.array(neg_tail_ids)
+    tvr = tvm.nd.array(rel_ids)
 
     params = {}
 
@@ -484,18 +476,8 @@ def TransF_tvm(batchsize, dim):
     print(m.benchmark(dev, number=1, repeat=1))
     neg_score = torch.from_numpy(m.get_output(0).asnumpy())
 
-    print(pos_score.shape, neg_score.shape)
-
-    nhh = eemb[neg_heads]
-    ntt = eemb[neg_tails]
-    nrr = remb[neg_relations]
-    neg_score2 = 2 * torch.einsum('ab,acb->ac', nhh, ntt) + torch.einsum('ab,acb->ac', nrr, (ntt - nhh.unsqueeze(1)))
-    print(1000*neg_score[0], 1000*neg_score2[0])
-    print(torch.sum(torch.abs(neg_score-neg_score2)))
-
-
 if __name__ == '__main__':
-    if args.model == 'TransE_l1':
+    if args.model == 'TransE':
         TransE_tvm(args.batchsize, args.dim)
     elif args.model == 'TransR':
         TransR_tvm(args.batchsize, args.dim)
@@ -505,4 +487,14 @@ if __name__ == '__main__':
         TransF_tvm(args.batchsize, args.dim)
     elif args.model == 'RESCAL':
         RESCAL_tvm(args.batchsize, args.dim)
+    elif args.model == 'neg_TransE':
+        neg_TransE_tvm(args.batchsize, args.dim)
+    elif args.model == 'neg_TransR':
+        neg_TransR_tvm(args.batchsize, args.dim)
+    elif args.model == 'neg_TransH':
+        neg_TransH_tvm(args.batchsize, args.dim)
+    elif args.model == 'neg_TransF':
+        neg_TransF_tvm(args.batchsize, args.dim)
+    elif args.model == 'neg_RESCAL':
+        neg_RESCAL_tvm(args.batchsize, args.dim)
     
