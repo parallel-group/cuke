@@ -11,11 +11,10 @@ def compile_and_run(code, *args):
                 f.write(code)
                 f.close()
     else:
+        if not os.path.exists('run/.tmp'):
+            os.makedirs('run/.tmp')
         f = open(filename, 'w')
         f.write(code)
         f.close()
-    # f = open('run/.tmp/cuda_code.cu', 'w')
-    # f.write(code)
-    # f.close()
     module = load(name='module', sources=[filename])
     return module.run(*args)

@@ -1,10 +1,10 @@
-from ... import transform, run
-from ...codegen import *
-from ...helpers import ASGTraversal, IRTraversal, flatten, get_obj
-from ...transform.fuse import basic_rule, fuse_operators
-from ...asg import *
-from ...asg2ir import gen_ir
-from ...ir import *
+from cuke import transform, run
+from cuke.codegen import *
+from cuke.helpers import ASGTraversal, IRTraversal, flatten, get_obj
+from cuke.transform.fuse import basic_rule, fuse_operators
+from cuke.asg import *
+from cuke.asg2ir import gen_ir
+from cuke.ir import *
 import os
 
 import torch
@@ -151,24 +151,6 @@ class smem():
                     ASGTraversal(action)(node)
                 # this function should 1) create a shared memory tensor for n.eval, 2) change all reference to the shared memory tensor for code in the scope of node, 3) handle both reduction ore non-reduction data
             
-            if type(n) == TensorOp and n.op_type == 'index' and 'reuse' in n.operators[1].attr and n.operators[1].attr['reuse'] == True:
-                unique_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), dtype='int', name=n.operators[1].name+'_uniq')
-                buf_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), dtype='int', name=n.operators[1].name+'_buf')
-                unique_cnt = Tensor((n.operators[1]._size()[0]/self.C, ), dtype='int', name=n.operators[1].name+'_unique_cnt')
-                n.operators[1].attr['idx'] = [[unique_idx.name, unique_idx], [buf_idx.name, buf_idx], [unique_cnt.name, unique_cnt]]
-                
-                # this function should 1) create a shared memory tensor for n.eval, 2) analyze n.eval.idx to get buf_idx/uniq_idx, 3) change all reference based on buf_idx/uniq_idx for code in the scope of node
-
-                if n.compute:
-                    transform.cuda_smem.add_indirect_cache(node, n, self.C, self.D, unique_idx, buf_idx, unique_cnt)
-                else:
-                    def action(nn, res):
-                        transform.cuda_smem.add_indirect_cache(nn, n, self.C, self.D, unique_idx, buf_idx, unique_cnt)
-                        if nn.ref_by:
-                            for i in nn.ref_by:
-                                    transform.cuda_smem.add_indirect_cache(i, n, self.C, self.D, unique_idx, buf_idx, unique_cnt)
-                    ASGTraversal(action)(node)
-
             def get_assigns(s, res):
                 if type(s) in (Assignment, Code):
                     res.append(s)
@@ -199,13 +181,49 @@ class smem():
                     for i in nn.ref_by:
                         recurrent_call(i)
                 recurrent_call(n)
-
+            
+        # print(codegen.gpu.to_string(node.compute))
         self.eval = node.eval
         t = ASGTraversal(action)(node)
         return node
 
+class indirect_smem():
+    '''
+    Transformation pass for adding memory optimization for the given asgnode.
+    We will load indirect memory access data into GPU shared memory to reuse indices and reduce global memory traffic.
+    '''
+    def __init__(self, C, D):
+        self.C = C
+        self.D = D
 
-transform.passes = [fuser(), tiler(16, 64), smem(16, 64)]
+    def __call__(self, node):
+        def action(n, res):
+            if type(n) == TensorOp and n.op_type == 'index' and 'reuse' in n.operators[1].attr and n.operators[1].attr['reuse'] == True:
+                unique_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), dtype='int', name=n.operators[1].name+'_uniq')
+                buf_idx = Tensor((n.operators[1]._size()[0]/self.C, self.C), dtype='int', name=n.operators[1].name+'_buf')
+                unique_cnt = Tensor((n.operators[1]._size()[0]/self.C, ), dtype='int', name=n.operators[1].name+'_unique_cnt')
+                n.operators[1].attr['idx'] = [[unique_idx.name, unique_idx], [buf_idx.name, buf_idx], [unique_cnt.name, unique_cnt]]
+                
+                # this function should 1) create a shared memory tensor for n.eval, 2) analyze n.eval.idx to get buf_idx/uniq_idx, 3) change all reference based on buf_idx/uniq_idx for code in the scope of node
+
+                # if n.compute:
+                transform.cuda_smem.add_indirect_cache(node, n, self.C, self.D, unique_idx, buf_idx, unique_cnt)
+                # else:
+                # print(node.op_type, codegen.gpu.to_string(node.compute))
+                def action(nn, res):
+                    transform.cuda_smem.add_indirect_cache(nn, n, self.C, self.D, unique_idx, buf_idx, unique_cnt)
+                    if nn.ref_by:
+                        for i in nn.ref_by:
+                            transform.cuda_smem.add_indirect_cache(i, n, self.C, self.D, unique_idx, buf_idx, unique_cnt)
+                ASGTraversal(action)(node)
+
+            
+        # print(codegen.gpu.to_string(node.compute))
+        self.eval = node.eval
+        t = ASGTraversal(action)(node)
+        return node
+
+transform.passes = [fuser(), tiler(16, 64), smem(16, 64), indirect_smem(16, 64)]
 # transform.passes = [fuser(), tiler(16, 64)]
 # transform.passes = [fuser()]
 
@@ -296,8 +314,8 @@ def transH():
     # TransH: Eemb[h] - Eemb[t] + Remb[r] - Pemb[r]^T * (Eemb[h] - Eemb[t]) * Pemb[r]
     res = vh - vt + vr - bsv(bvv(vp, vh - vt), vp)
     # code = codegen.cpu.print_cpp(gen_ir(res))
-    code = codegen.gpu.print_cuda(gen_ir(res))
-    # print(code)
+    code = gpu.print_cuda(gen_ir(res))
+    print(code)
 
 
 def transR():
@@ -321,7 +339,7 @@ def transR():
     # TransR: (Eemb[h] - Eemb[t])^T * Proj[r] + Remb[r]
     res = bvm(vh - vt, mr) + vr
     # code = codegen.cpu.print_cpp(gen_ir(res))
-    code = codegen.gpu.print_cuda(gen_ir(res))
+    code = gpu.print_cuda(gen_ir(res))
     print(code)
 
 
@@ -345,7 +363,7 @@ def transF():
     res = bvv(vh+vr, vt) + bvv(vt-vr, vh)
     # code = codegen.cpu.print_cpp(gen_ir(res))
     # print(code)
-    code = codegen.gpu.print_cuda(gen_ir(res))
+    code = gpu.print_cuda(gen_ir(res))
     print(code)
 
 
@@ -368,7 +386,7 @@ def RESCAL():
     # RESCAL: Eemb[h]^T * Remb[r] * Eemb[t]
     res = bvv(bvm(vh, mr), vt)
     # code = codegen.cpu.print_cpp(gen_ir(res))
-    code = codegen.gpu.print_cuda(gen_ir(res))
+    code = gpu.print_cuda(gen_ir(res))
     print(code)
 
 
@@ -393,13 +411,13 @@ def backward_transr():
     # gradient of vh is dout^T * mr
     # gradient of vt is - dout^T * mr
     bwd_h = bvm(grad, mr)
-    # print(codegen.gpu.print_cuda(gen_ir(bwd_h)))
-    # write_code(codegen.gpu.print_cuda(gen_ir(bwd_h)), 'bwd_h.cu')
+    print(gpu.print_cuda(gen_ir(bwd_h)))
+    # write_code(gpu.print_cuda(gen_ir(bwd_h)), 'bwd_h.cu')
 
     # gradient of mr is dout * (vh - vt)^T
     bwd_pr = bov(grad, vh-vt)
-    # print(codegen.gpu.print_cuda(gen_ir(bwd_pr)))
-    # write_code(codegen.gpu.print_cuda(gen_ir(bwd_pr)), 'bwd_pr.cu')
+    print(gpu.print_cuda(gen_ir(bwd_pr)))
+    # write_code(gpu.print_cuda(gen_ir(bwd_pr)), 'bwd_pr.cu')
 
 
 def backward_rescal():
@@ -420,18 +438,18 @@ def backward_rescal():
 
     # gradient of vh is dout * (vt^T * mr)
     bwd_h = bsv(grad, bvm(vt, mr))
-    # print(codegen.gpu.print_cuda(gen_ir(bwd_h)))
-    # write_code(codegen.gpu.print_cuda(gen_ir(bwd_h)), 'bwd_h.cu')
+    print(gpu.print_cuda(gen_ir(bwd_h)))
+    # write_code(gpu.print_cuda(gen_ir(bwd_h)), 'bwd_h.cu')
 
     # gradient of vt is dout * (vh^T * mr)
     bwd_t = bsv(grad, bvm(vh, mr))
-    # print(codegen.gpu.print_cuda(gen_ir(bwd_t)))
-    # write_code(codegen.gpu.print_cuda(gen_ir(bwd_t)), 'bwd_t.cu')
+    print(gpu.print_cuda(gen_ir(bwd_t)))
+    # write_code(gpu.print_cuda(gen_ir(bwd_t)), 'bwd_t.cu')
 
     # gradient of mr is dout * (vh * vt^T)
     bwd_r = bsm(grad, bov(vh, vt))
-    # print(codegen.gpu.print_cuda(gen_ir(bwd_r)))
-    # write_code(codegen.gpu.print_cuda(gen_ir(bwd_r)), 'bwd_r.cu')
+    print(gpu.print_cuda(gen_ir(bwd_r)))
+    # write_code(gpu.print_cuda(gen_ir(bwd_r)), 'bwd_r.cu')
 
 
 def backward_transh():
@@ -456,13 +474,13 @@ def backward_transh():
     # gradient of vh is dout^T * (1 + vp * vp^T)
     # gradient of vt is - dout^T * (1 + vp * vp^T)
     bwd_h = bvm(grad, one+bov(vp, vp))
-    # print(codegen.gpu.print_cuda(gen_ir(bwd_h)))
-    # write_code(codegen.gpu.print_cuda(gen_ir(bwd_h)), 'bwd_h.cu')
+    print(gpu.print_cuda(gen_ir(bwd_h)))
+    # write_code(gpu.print_cuda(gen_ir(bwd_h)), 'bwd_h.cu')
 
     # gradient of vp is dout^T * (vp * (vh - vt)^T + (vh - vt)^T * vp)
     bwd_pr = bvm(grad, bov(vp, vh-vt) + bvv(vh-vt, vp))
-    # print(codegen.gpu.print_cuda(gen_ir(bwd_pr)))
-    # write_code(codegen.gpu.print_cuda(gen_ir(bwd_pr)), 'bwd_pr.cu')
+    print(gpu.print_cuda(gen_ir(bwd_pr)))
+    # write_code(gpu.print_cuda(gen_ir(bwd_pr)), 'bwd_pr.cu')
 
 
 def backward_transf():
@@ -488,13 +506,13 @@ def backward_transf():
 
     # gradient of vt is dout * (2 * vh + vr)
     bwd_t = bsv(grad, two*vh+vr)
-    # print(codegen.gpu.print_cuda(gen_ir(bwd_t)))
-    # write_code(codegen.gpu.print_cuda(gen_ir(bwd_t)), 'bwd_t.cu')
+    print(gpu.print_cuda(gen_ir(bwd_t)))
+    # write_code(gpu.print_cuda(gen_ir(bwd_t)), 'bwd_t.cu')
 
     # gradient of vr is dout * (vt - vh)
     bwd_r = bsv(grad, vt-vh)
-    # print(codegen.gpu.print_cuda(gen_ir(bwd_r)))
-    # write_code(codegen.gpu.print_cuda(gen_ir(bwd_r)), 'bwd_r.cu')
+    print(gpu.print_cuda(gen_ir(bwd_r)))
+    # write_code(gpu.print_cuda(gen_ir(bwd_r)), 'bwd_r.cu')
 
 
 
@@ -508,4 +526,4 @@ if __name__ == "__main__":
     # backward_rescal()
     # backward_transh()
     # backward_transf()
-    # backward_transe()
+    
