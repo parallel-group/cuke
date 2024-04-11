@@ -33,11 +33,11 @@ A = Tensor((10, ))
 B = Tensor((10, ))
 
 #Create an elementwise add operator.
-#A and B are the input nodes, res is the output node. 
+#'A' and 'B' are the input nodes, 'res' is the output node. 
 res = A + B
 
 #Now we get an ASG of three tensor nodes.
-#`gen_ir` invokes the asg->ir procedure and `print_cpp` returns the generated C++ code. 
+#'gen_ir' invokes the asg->ir procedure and 'print_cpp' returns the generated C++ code. 
 code = codegen.cpu.print_cpp(gen_ir(res))
 print(code)
 ```
@@ -56,7 +56,7 @@ def is_in(x, li):
 def intersect(a, b):
     #We create an apply operator, 'a' is the input and 'cond' is the output.
     #The 'apply' operator invokes the 'is_in' function for each element of 'a'(x=a[i]).
-    #The cond has the same size as a. 
+    #The cond has the same size as 'a'. 
     #'cond' stores the result of the 'is_in' function for each element of 'a' in the corresponding position(cond[i]=is_in(a[i], b)).
     cond = a.apply(lambda x: is_in(x, b))
     #We create a conditional apply operator.
