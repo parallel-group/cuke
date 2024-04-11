@@ -12,19 +12,19 @@ conda activate cuke
 Check out and install this repository:
 ```cmd
 git clone https://github.com/pengjiang-hpc/cuke
-pip install cuke/
+pip install pycuke
 ```
 
 
 ## Usage
 **An example of elementwise add**
 ```python
-# cuke.asg contains the class definitions of Tensor and Operators.
-from cuke.asg import *
-# cuke.asg2ir contains the translation function from ASG to IR.
-from cuke.asg2ir import gen_ir
-# cuke.codegen is the module translating IR to C++ code. 
-import cuke.codegen as codegen
+# pycuke.asg contains the class definitions of Tensor and Operators.
+from pycuke.asg import *
+# pycuke.asg2ir contains the translation function from ASG to IR.
+from pycuke.asg2ir import gen_ir
+# pycuke.codegen is the module translating IR to C++ code. 
+import pycuke.codegen as codegen
 
 # Create two tensor nodes: A and B of size 10
 A = Tensor((10, ))
