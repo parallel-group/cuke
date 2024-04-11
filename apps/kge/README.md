@@ -149,32 +149,32 @@ To test the performance of score function on [TVM](https://github.com/apache/tvm
 
 ### Reproducing the results of Figure 9
 ```bash
-bash test_fig9a.sh
-bash test_fig9b.sh
-bash test_fig9c.sh
-bash test_fig9d.sh
+bash scripts/test_fig9a_cuke.sh
+bash scripts/test_fig9b_cuke.sh
+bash scripts/test_fig9c_cuke.sh
+bash scripts/test_fig9d_cuke.sh
 
-bash test_fig9a_pytorch.sh
-bash test_fig9b_pytorch.sh
-bash test_fig9c_pytorch.sh
-bash test_fig9d_pytorch.sh
+bash scripts/test_fig9a_pytorch.sh
+bash scripts/test_fig9b_pytorch.sh
+bash scripts/test_fig9c_pytorch.sh
+bash scripts/test_fig9d_pytorch.sh
 
 # make sure you have successfully installed TVM.
-bash test_fig9a_tvm.sh
-bash test_fig9b_tvm.sh
-bash test_fig9c_tvm.sh
-bash test_fig9d_tvm.sh
+bash scripts/test_fig9a_tvm.sh
+bash scripts/test_fig9b_tvm.sh
+bash scripts/test_fig9c_tvm.sh
+bash scripts/test_fig9d_tvm.sh
 ```
 
 ### Reproducing the results of Figure 10
 ```bash
-bash test_fig10a.sh
-bash test_fig10b.sh
+bash scripts/test_fig10a_cuke.sh
+bash scripts/test_fig10b_cuke.sh
 
-bash test_fig10a_pytorch.sh
-bash test_fig10b_pytorch.sh
+bash scripts/test_fig10a_pytorch.sh
+bash scripts/test_fig10b_pytorch.sh
 
 # make sure you have successfully installed TVM.
-bash test_fig10a_tvm.sh
-bash test_fig10b_tvm.sh
+bash scripts/test_fig10a_tvm.sh
+bash scripts/test_fig10b_tvm.sh
 ```

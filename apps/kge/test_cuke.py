@@ -10,8 +10,8 @@ import os
 import torch
 from torch.utils.cpp_extension import load
 
-from apps.kge.data import *
-from apps.kge.kge import *
+from data import *
+from kge import *
 
 import argparse
 parser = argparse.ArgumentParser(description="test on pytorch")

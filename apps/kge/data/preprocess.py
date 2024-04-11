@@ -502,7 +502,7 @@ class KGDatasetUDD(KGDataset):
         return self.rmap_file
     
 
-def get_dataset(data_name, data_path='apps/kge/data', format_str='built_in', delimiter='\t', files=None, has_edge_importance=False):
+def get_dataset(data_name, data_path=os.path.dirname(__file__), format_str='built_in', delimiter='\t', files=None, has_edge_importance=False):
     if format_str == 'built_in':
         if data_name == 'FB15k':
             dataset = KGDatasetFB15k(data_path)
