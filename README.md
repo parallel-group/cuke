@@ -12,7 +12,8 @@ conda activate cuke
 Check out and install this repository:
 ```cmd
 git clone https://github.com/pengjiang-hpc/cuke
-pip install pycuke
+cd cuke
+pip install .
 ```
 
 
