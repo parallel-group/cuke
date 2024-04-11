@@ -143,7 +143,7 @@ There are implementations of more complicated KGE score functions in ``kge.py``.
 
 ## Reproduce Results in Paper
 
-We provide some shell scripts for batched test, or you can input the command to test a specific pattern and graph directly. The input graph datasets will be automatically downloaded when you first run the scripts.
+We provide some shell scripts for batched test, or you can input the command to test a specific pattern and graph directly. All your executable scripts and commands can be executed under *kge* folder. The input graph datasets will be automatically downloaded when you first run the scripts.
 
 To test the performance of score function on [TVM](https://github.com/apache/tvm), please make sure TVM has been successfully installed.
 
