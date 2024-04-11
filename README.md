@@ -21,9 +21,12 @@ You can also use ``python setup.py install`` to install cuke
 ## Usage
 **An example of elementwise add**
 ```python
-import cuke.codegen as codegen
+#cuke.asg contains the class definitions for Tensor and Operators.
 from cuke.asg import *
+#cuke.asg2ir contains the translation function from ASG to IR.
 from cuke.asg2ir import gen_ir
+#cuke.codegen is the module translating IR to C++ code. 
+import cuke.codegen as codegen
 
 #Create two tensor nodes: A and B
 A = Tensor((10, ))
