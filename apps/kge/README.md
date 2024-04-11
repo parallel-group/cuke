@@ -143,6 +143,8 @@ There are implementations of more complicated KGE score functions in ``kge.py``.
 
 ## Reproduce Results in Paper
 
+Before you can run code in this folder, you need to follow the instructions in the root folder to install cuke. 
+
 We provide some shell scripts to reproduce the experiments in our paper, and you can also input the command or create new score function to test the performance of them. All your executable scripts and commands can be executed under `kge/` folder. The input graph datasets will be automatically downloaded when you first run the scripts.
 
 To test the performance of score function on [TVM](https://github.com/apache/tvm), please make sure TVM has been successfully installed.
