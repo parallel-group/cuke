@@ -46,6 +46,8 @@ def is_in(x, li):
     """)
     found = Var(dtype='int')
     found.attr['is_arg'] = False
+    #inline is an operator for calling external functions. 
+    #F, LI, LSIZE, and X are all placeholders that will be replaced by the tensor nodes.
     return inline(src, [('F', found)], [('X', x), ('LI', li), ('LSIZE', li._size()[0])])
 
 def intersect(a, b):
