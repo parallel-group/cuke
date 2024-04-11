@@ -6,8 +6,8 @@ It was initially developed to teach compiler optimization at the University of I
 ## Installation
 Make sure to use python 3.8 or later:
 ```cmd
-conda create -n pycuke python=3.8
-conda activate pycuke 
+conda create -n cuke python=3.8
+conda activate cuke 
 ```
 Check out and install this repository:
 ```cmd
