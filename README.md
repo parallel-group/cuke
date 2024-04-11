@@ -15,29 +15,27 @@ git clone https://github.com/pengjiang-hpc/cuke
 pip install cuke/
 ```
 
-You can also use ``python setup.py install`` to install cuke
-
 
 ## Usage
 **An example of elementwise add**
 ```python
-#cuke.asg contains the class definitions of Tensor and Operators.
+# cuke.asg contains the class definitions of Tensor and Operators.
 from cuke.asg import *
-#cuke.asg2ir contains the translation function from ASG to IR.
+# cuke.asg2ir contains the translation function from ASG to IR.
 from cuke.asg2ir import gen_ir
-#cuke.codegen is the module translating IR to C++ code. 
+# cuke.codegen is the module translating IR to C++ code. 
 import cuke.codegen as codegen
 
-#Create two tensor nodes: A and B
+# Create two tensor nodes: A and B of size 10
 A = Tensor((10, ))
 B = Tensor((10, ))
 
-#Create an elementwise add operator.
-#'A' and 'B' are the input nodes, 'res' is the output node. 
+# Create an elementwise add operator.
+# 'A' and 'B' are the input nodes, 'res' is the output node. 
 res = A + B
 
-#Now we get an ASG of three tensor nodes.
-#'gen_ir' invokes the asg->ir procedure and 'print_cpp' returns the generated C++ code. 
+# Now, we get a computational graph of three tensor nodes.
+# 'gen_ir' invokes the asg->ir procedure and 'print_cpp' returns the generated C++ code. 
 code = codegen.cpu.print_cpp(gen_ir(res))
 print(code)
 ```
@@ -49,19 +47,19 @@ def is_in(x, li):
     """)
     found = Var(dtype='int')
     found.attr['is_arg'] = False
-    #inline is an operator for calling external functions. 
-    #F, LI, LSIZE, and X are all placeholders that will be replaced by the tensor nodes.
+    # inline is an operator for calling external functions. 
+    # F, LI, LSIZE, and X are all placeholders that will be replaced by the tensor nodes.
     return inline(src, [('F', found)], [('X', x), ('LI', li), ('LSIZE', li._size()[0])])
 
 def intersect(a, b):
-    #We create an apply operator, 'a' is the input and 'cond' is the output.
-    #The 'apply' operator invokes the 'is_in' function for each element of 'a'(x=a[i]).
-    #The 'cond' has the same size as 'a'. 
-    #'cond' stores the result of the 'is_in' function for each element of 'a' in the corresponding position(cond[i]=is_in(a[i], b)).
+    # We create an apply operator, 'a' is the input and 'cond' is the output.
+    # The 'apply' operator invokes the 'is_in' function for each element of 'a'(x=a[i]).
+    # The 'cond' has the same size as 'a'. 
+    # 'cond' stores the result of the 'is_in' function for each element of 'a' in the corresponding position(cond[i]=is_in(a[i], b)).
     cond = a.apply(lambda x: is_in(x, b))
-    #We create a conditional apply operator.
-    #For each element 'x' of 'a'(x=a[i], i is the iterator), if 'cond[i]' is true, we make an assignment c[csize++]=a[i].
-    #The size of 'c'(csize) is not the same as 'a' 
+    # We create a conditional apply operator.
+    # For each element 'x' of 'a'(x=a[i], i is the iterator), if 'cond[i]' is true, we make an assignment c[csize++]=a[i].
+    # The size of 'c'(csize) is not the same as 'a' 
     c = a.apply(lambda x: x, cond=cond)
     return c
 
