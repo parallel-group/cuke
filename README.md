@@ -51,6 +51,12 @@ def is_in(x, li):
 def intersect(a, b):
     c = a.apply(lambda x: is_in(x, b))
     return a.apply(lambda x: x, cond=c)
+
+A = Tensor((10, ))
+B = Tensor((20, ))
+res = intersect(A, B)
+code = codegen.cpu.print_cpp(gen_ir(res))
+print(code)
  ```
 
 More examples can be found in the ``apps`` folder. 
