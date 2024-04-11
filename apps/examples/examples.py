@@ -1,11 +1,11 @@
 import torch
 
-import helpers
-import transform
-from asg import Tensor, Var, apply, bigger, setval, einsum
-from asg2ir import gen_ir
-import codegen
-import run
+import pycuke.helpers as helpers
+import pycuke.transform as transform
+from pycuke.asg import Tensor, Var, apply, bigger, setval, einsum
+from pycuke.asg2ir import gen_ir
+import pycuke.codegen as codegen
+import pycuke.run as run
 
 
 def test1():
@@ -1503,10 +1503,10 @@ def var_test2():
 
 if __name__ == "__main__":
     # basic tensor indexing tests
-    # test1() # pass
-    # test2() # pass
-    # test3() # pass
-    # test4() # pass
+    test1() # pass
+    test2() # pass
+    test3() # pass
+    test4() # pass
     # test5() # pass
     # test6() # pass
     # test7() # pass
@@ -1519,11 +1519,11 @@ if __name__ == "__main__":
     # test10_3() # pass
     # test10_4() # pass
     # test10_5() # pass
-    test11()
-    test12()
-    test13()
-    test13_1()
-    test14()
+    # test11()
+    # test12()
+    # test13()
+    # test13_1()
+    # test14()
     # some slicing examples
     # test15()
     # test16()
@@ -1593,5 +1593,5 @@ if __name__ == "__main__":
 
 
     #
-    # var_test1() # pass
+    var_test1() # pass
     # var_test2() # pass
