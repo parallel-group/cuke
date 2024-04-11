@@ -21,7 +21,7 @@ You can also use ``python setup.py install`` to install cuke
 ## Usage
 **An example of elementwise add**
 ```python
-#cuke.asg contains the class definitions for Tensor and Operators.
+#cuke.asg contains the class definitions of Tensor and Operators.
 from cuke.asg import *
 #cuke.asg2ir contains the translation function from ASG to IR.
 from cuke.asg2ir import gen_ir
