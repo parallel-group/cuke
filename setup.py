@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 setup(
     name='pycuke',
     version='0.0.1',
-    description='cuKE: An Efficient Code Generator for Score Function Computation in Knowledge Graph Embedding',
+    description='A source-to-source compiler for automatic code parallelization and optimization',
     packages=find_packages(),
     package_data={'':['*']},
     include_package_data=True,

@@ -86,7 +86,7 @@ def to_string(stmt):
             elif type(stmt.dobject) == ir.Ndarray:
                 code = ''
                 if not stmt.dobject.attr['is_arg']:
-                    code = f'torch::Tensor obj_{stmt.dobject.name()} = torch::empty({{{",".join([to_string(s) for s in stmt.dobject.size])}}}, at::{type_map[stmt.dobject.dtype]});\n'
+                    code = f'torch::Tensor obj_{stmt.dobject.name()} = torch::empty({{{", ".join([to_string(s) for s in stmt.dobject.size])}}}, at::{type_map[stmt.dobject.dtype]});\n'
                 code += f'auto {stmt.dobject.name()} = obj_{stmt.dobject.name()}.accessor<{stmt.dobject.dtype}, {len(stmt.dobject.size)}>();\n'
                 return code
     elif isinstance(stmt, ir.Math):
