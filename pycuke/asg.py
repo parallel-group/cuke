@@ -19,6 +19,10 @@ int_types = ['int', 'int32_t', 'int64_t']
 float_types = ['float', 'double']
 
 
+
+def check_axis(axis):
+    assert type(axis) == int or (type(axis) == Const and axis.dtype in int_types), 'axis must be an integer or a Const'
+
 def new_op(func):
     def wrapper_func(*args, **kwargs):
         _res = func(*args, **kwargs)
@@ -157,15 +161,16 @@ class Tensor(ASTNode):
 
 
     def apply(self, func, axis=0, out_ofs=None, cond=None):
-        assert callable(func)
+        assert callable(func), 'apply func must be callable'
         return TensorOp('apply', func, self, axis, out_ofs, cond)
 
+    # general reduction
     def reduce(self, func, init, axis=0):
-        if callable(func) and callable(init):
-            return TensorOp('reduce', self, func, init, axis)
-        else:
-            raise TypeError('reduce must use a callable function')
+        assert callable(func) and callable(init), 'reduce func must be callable'
+        return TensorOp('reduce', self, func, init, axis)
 
+
+    # sum can also be implemented with reduce
     @new_op
     def sum(self, axis=0):
         s1 = ''
@@ -178,12 +183,12 @@ class Tensor(ASTNode):
 
     def max(self, axis=0):
         func = lambda x, y: bigger(x, y)
-        init = lambda: setval(MIN_INT)
+        init = lambda x: setval(MIN_INT, dest=x)
         return self.reduce(func, init, axis)
 
     def min(self, axis=0):
         func = lambda x, y: smaller(x, y)
-        init = lambda: setval(MAX_INT)
+        init = lambda x: setval(MAX_INT, dest=x)
         return self.reduce(func, init, axis)
 
     def aggr(self, func, init, indices, axis=0, size=None):
@@ -209,30 +214,22 @@ class Tensor(ASTNode):
         return self.aggr(func, init, indices, axis, size)
 
     def prefix_sum(self, axis=0, inclusive=True):
-        assert type(axis) == int or (type(axis) == Const and axis.dtype in int_types), 'axis must be an integer or a Const'
+        check_axis(axis)
         if type(axis) == Const:
             axis = axis.val
 
         assert len(self.ref_size) > 0, 'input must have at least one dimension'
-        data = self
-        size = []
-        if not inclusive:
-            size[0] = self.ref_size[axis] + 1
+        res = Tensor(self.ref_size, dtype=self.dtype)
 
-        for i in range(len(self.ref_size)):
-            if axis != i:
-                size.append(self.ref_size[i])
-
-        res = Tensor(size, dtype=self.dtype)
-
+        subscripts = []
         for i in range(axis):
-            data = data[:]
-            res = res[:]
+            subscripts.append(slice(0, self.ref_size[i], 1))
 
-        if inclusive:
-            return setval(data[:] + res[-1:size[axis] - 1], dest=res)
-        else:
-            return setval(data[-1:data._size()[axis]] + res[-1:size[axis] - 1], dest=res)
+
+        res_subscripts = subscripts + [slice(-1, self.ref_size[axis] - 1, 1)]
+        data_subscripts = subscripts + [slice(0, self.ref_size[axis], 1) if inclusive else slice(-1, self.ref_size[axis] - 1, 1)]
+
+        return setval(self[tuple(data_subscripts)] + res[tuple(res_subscripts)], dest=res)
 
     def _size(self):
         return self.ref_size
@@ -485,10 +482,13 @@ class TensorOp(Tensor):
                 self.operators.append(None)
 
         elif op_type == 'reduce':
-            assert type(self.operators[3]) == int
-            axis = self.operators[3]
-            self.operators[3] = Const(axis, 'int')
-            ref_size = self.operators[0]._size()[:axis] + self.operators[0]._size()[axis + 1:]
+            check_axis(self.operators[3])
+            if type(self.operators[3]) == int:
+                axis = self.operators[3]
+                self.operators[3] = Const(axis, 'int')
+            else:
+                axis = self.operators[3].val
+            ref_size = self.operators[0].ref_size[:axis] + self.operators[0].ref_size[axis + 1:]
             dtype = self.operators[0].dtype
             if (len(ref_size) > 0):
                 item1 = Tensor(ref_size, self.operators[0].dtype)
@@ -541,7 +541,7 @@ class TensorOp(Tensor):
             ref_size = self.operators[0]._size()
             if (helpers.is_scalar(self.operators[1])):
                 if type(self.operators[1]) == int:
-                    assert(dtype in int_types)
+                    assert(dtype in int_types or dtype in float_types)
                     self.operators[1] = Const(self.operators[1], dtype)
                 elif type(self.operators[1]) == float:
                     assert(dtype in float_types)

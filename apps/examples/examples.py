@@ -1081,24 +1081,30 @@ def test26():
     print(res, torch.sum(A))
 
 def reduce_test1():
-    A = Tensor('a', (10, 20))
-    # ast = A.reduce(lambda a,b: a+b, lambda res: setval(res, 0), axis=1)
-    ast = A.sum(axis=1)
-    ir = gen_ir(ast)
-    print(helpers.get_input_nodes(ir))
-    code = codegen.cpu.print_cpp(ir)
+    A = Tensor((10, 20))
+    res = A.sum(axis=0)
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
+    A = torch.rand(10, 20)
+    res = run.cpu.compile_and_run(code, A)
+    print(res - torch.sum(A, dim=0))
+
+
+def reduce_test2():
+    A = Tensor((10, 20))
+    res = A.sum(axis=1)
+    code = codegen.cpu.print_cpp(gen_ir(res))
     print(code)
 
     A = torch.rand(10, 20)
     res = run.cpu.compile_and_run(code, A)
     print(res - torch.sum(A, dim=1))
 
-def reduce_test2():
-    A = Tensor('a', (10, 20, 5))
-    ast = A.sum(axis=1)
-    ir = gen_ir(ast)
-    print(helpers.get_input_nodes(ir))
-    code = codegen.cpu.print_cpp(ir)
+def reduce_test3():
+    A = Tensor((10, 20, 5))
+    res = A.sum(axis=1)
+    code = codegen.cpu.print_cpp(gen_ir(res))
 
     print(code)
 
@@ -1107,28 +1113,66 @@ def reduce_test2():
     print(res - torch.sum(A, dim=1))
 
 
-def reduce_test3():
-    A = Tensor('a', (10, 20, 5))
-    ast = A.max(axis=1)
-    ir = gen_ir(ast)
-    print(helpers.get_input_nodes(ir))
-    code = codegen.cpu.print_cpp(ir)
+def reduce_test4():
+    A = Tensor((10, 20, 5))
+    res = A.max(axis=0)
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
+    A = torch.rand(10, 20, 5)
+    res = run.cpu.compile_and_run(code, A)
+    print(res - torch.max(A, dim=0).values)
+
+
+def reduce_test5():
+    A = Tensor((10, 20, 5))
+    res = A.max(axis=1)
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
 
     A = torch.rand(10, 20, 5)
     res = run.cpu.compile_and_run(code, A)
     print(res - torch.max(A, dim=1).values)
 
+def reduce_test6():
+    A = Tensor((10, 20, 5))
+    res = A.max(axis=2)
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
 
-def reduce_test4():
-    A = Tensor('a', (10,))
-    ast = A.max()
-    ir = gen_ir(ast)
-    print(helpers.get_input_nodes(ir))
-    code = codegen.cpu.print_cpp(ir)
+    A = torch.rand(10, 20, 5)
+    res = run.cpu.compile_and_run(code, A)
+    print(res - torch.max(A, dim=2).values)
+
+def reduce_test7():
+    A = Tensor((10, 20))
+    res = A.min(axis=0)
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
+    A = torch.rand(10, 20)
+    res = run.cpu.compile_and_run(code, A)
+    print(res - torch.min(A, dim=0).values)
+
+def reduce_test8():
+    A = Tensor((10, ))
+    res = A.min(axis=0)
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
 
     A = torch.rand(10, )
     res = run.cpu.compile_and_run(code, A)
-    print(res - torch.max(A))
+    print(res - torch.min(A, dim=0).values)
+
+def reduce_test9():
+    A = Tensor((10, ))
+    res = A.max(axis=0)
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
+    A = torch.rand(10, )
+    res = run.cpu.compile_and_run(code, A)
+    print(res - torch.max(A, dim=0).values)
 
 def test29():
     A = Tensor('A', (10, ))
@@ -1501,12 +1545,36 @@ def var_test2():
     print(code)
 
 
+def psum_test1():
+    data = Tensor((10, 20))
+    res = data.prefix_sum(axis=0, inclusive=True)
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
+def psum_test2():
+    data = Tensor((10, 20))
+    res = data.prefix_sum(axis=0, inclusive=False)
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
+def psum_test3():
+    data = Tensor((10, 20))
+    res = data.prefix_sum(axis=1, inclusive=True)
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
+def psum_test4():
+    data = Tensor((10, 20))
+    res = data.prefix_sum(axis=1, inclusive=False)
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
 if __name__ == "__main__":
     # basic tensor indexing tests
-    test1() # pass
-    test2() # pass
-    test3() # pass
-    test4() # pass
+    # test1() # pass
+    # test2() # pass
+    # test3() # pass
+    # test4() # pass
     # test5() # pass
     # test6() # pass
     # test7() # pass
@@ -1557,10 +1625,15 @@ if __name__ == "__main__":
     # view_apply_test4() # pass
 
 
-    # reduce_test1()
-    # reduce_test2()
-    # reduce_test3()
-    # reduce_test4()
+    # reduce_test1()  # pass
+    # reduce_test2()  # pass
+    # reduce_test3() # pass
+    reduce_test4() # pass
+    reduce_test5() # pass
+    reduce_test6() # pass
+    reduce_test7() # pass
+    reduce_test8() # pass
+    # reduce_test9() # pass
     # test_aggr1()
     # spmv()
     # test_einsum1()
@@ -1592,6 +1665,10 @@ if __name__ == "__main__":
     # neg_transR()
 
 
-    #
-    var_test1() # pass
+    # var_test1() # pass
     # var_test2() # pass
+
+    # psum_test1()
+    # psum_test2()
+    # psum_test3()
+    # psum_test4()

@@ -732,7 +732,7 @@ def gen_ir(node):
 
             # if there is an offset for output storage
             if out_ofs != None:
-                assert type(ret_compute[-1]) in (ir.Loop, ir.Assignment)
+                assert type(ret_compute[-1]) in (ir.Loop, ir.Assignment, ir.Code)
                 l = ret_compute[-1]
                 while (type(l) == ir.Loop):
                     l = l.body[-1]
@@ -776,7 +776,6 @@ def gen_ir(node):
 
 
         elif node.op_type == 'reduce':
-            # TODO: add input_orders for reduce, and aggr
             gen_ir(node.operators[0])  # input data
             gen_ir(node.operators[3])  # axis
             axis = node.operators[3].eval.val
@@ -791,54 +790,91 @@ def gen_ir(node):
             # the decl of node.eval should be added to the init
             node.operators[2].decl.append(ir.Decl(node.eval))
 
-            outer_loop = ir.Loop(0, node.operators[0].eval.size[axis], 1, [], 'reduction')
+
+            reduce_loop = ir.Loop(0, node.operators[0].eval.size[axis], 1, [], 'reduction')
+
+            subscripts = []
+
+            data = node.operators[0]
+            n = num_unbind(data.eval)
+
+            for i in range(axis):
+                op = asg.Const(slice(0, data.ref_size[i], 1), 'slice')
+                gen_ir(op)
+                subscripts.append(op.eval)
+
+            subscripts.append(reduce_loop.iterate)
+
+            for i in range(axis+1, len(data.ref_size)):
+                op = asg.Const(slice(0, data.ref_size[i], 1), 'slice')
+                gen_ir(op)
+                subscripts.append(op.eval)
+
+            real_subscripts = resolve_view(data, subscripts)
 
             item1 = node.operators[4]
             item2 = node.operators[5]
             item1.eval = node.eval
-            item2.eval = node.operators[0].eval
-            n = num_unbind(item2.eval)
-            for i in range(n, axis):
-                item2.eval = ir.Indexing(item2.eval, ir.Literal(-1, 'int'))
-            if axis > n:
-                item2.eval = ir.Indexing(item2.eval, outer_loop.iterate)
-            else:
-                item2.eval = bind(item2.eval, [outer_loop.iterate])
-            item2.decl = []
-            item1.decl = []
+            item2.eval = data.eval
+
+            item2.eval = bind(data.eval, real_subscripts)
+
+            if 'dim_map' in data.attr and 'size_map' in data.attr:
+                dim_map = [data.attr['dim_map'][ii] for ii in range(len(subscripts)) if
+                           type(subscripts[ii]) == ir.Slice]
+                size_map = [data.attr['size_map'][ii] for ii in range(len(subscripts)) if
+                            type(subscripts[ii]) == ir.Slice]
+                item2 = node.operators[5]
+                tmp = list(range(len(real_subscripts)))
+                j = 0
+                for k in range(len(real_subscripts)):
+                    if type(real_subscripts[k]) == ir.Slice:
+                        tmp[k] = j
+                        j += 1
+                    else:
+                        tmp[k] = None
+                item2.attr['dim_map'] = []
+                item2.attr['size_map'] = []
+                for k in range(len(dim_map)):
+                    d = dim_map[k]
+                    if d == -1:
+                        item2.attr['dim_map'].append(-1)
+                        item2.attr['size_map'].append(size_map[k])
+                    else:
+                        if tmp[d] is not None:
+                            item2.attr['dim_map'].append(tmp[d])
+                            item2.attr['size_map'].append(size_map[k])
+
 
             ret = node.operators[-1]
             gen_ir(ret)
 
+            # TODO: get the input orders
+
+
+            # 'compute' is the loop body where init should be inserted
             compute = ret.output_order[-1][1].body if len(ret.output_order) > 0 else ret.compute
-            outer_loop.body = compute[:]
+            if len(compute) == 0:
+                compute.append(ir.Assignment(node.eval, ret.eval))
+            # put the statements in 'compute' into the reduce_loop
+            reduce_loop.body = compute[:]
             compute.clear()
 
-            # merge init into node.compute
+            # merge init into compute
             init = node.operators[2].output_order[-1][1].body if len(node.operators[2].output_order) > 0 else \
             node.operators[2].compute
-            # assert len(node.operators[2].output_order) == len(ret.output_order)
             for i in range(len(node.operators[2].output_order)):
-                # assert has_same_iteration_space(node.operators[2].output_order[i][1], ret.output_order[i][1])
                 helpers.rebind_iterate(init, node.operators[2].output_order[i][1].iterate, ret.output_order[i][1].iterate)
                 node.output_order.append((i, ret.output_order[i][1]))
                 ret.output_order[i][1].attr['output_axis'] = i
             compute.extend(init)
             node.operators[2].compute.clear()
-            compute.append(outer_loop)
+            compute.append(reduce_loop)
 
-            def action(node, res):
-                if isinstance(node, asg.Tensor):
-                    res.extend(node.compute)
-                    node.compute.clear()
+            # replace ret.eval with node.eval and remove decl of ret.eval
+            helpers.replace_all_ref(ret.compute, ret.eval, node.eval)
+            ret.decl = [d for d in ret.decl if not helpers.same_object(d.dobject, ret.eval)]
 
-            t = asg.ASGTraversal(action)
-            ret_compute = t(ret)
-
-            node.compute.extend(ret_compute)
-
-            replace_output(node.compute, ret.eval, node.eval)
-            node.decl = [d for d in node.decl if d.dobject != ret.eval]
 
 
         elif node.op_type == 'aggr':
