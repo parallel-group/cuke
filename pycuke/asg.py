@@ -1,22 +1,9 @@
 from __future__ import annotations
 import inspect
 from . import helpers
+from .types import *
 
-MIN_INT = -2147483648
-MAX_INT = 2147483647
 
-arith_op = {'add': '+', 'sub': '-', 'mul': '*', 'floordiv': '/', 'truediv': '/', 'mod': '%'}
-math_op = ['round', 'abs', 'nbits']
-cmp_op = ['bigger', 'smaller']
-func_op = ['apply', 'reduce', 'aggr']
-other_op = ['setval', 'einsum', 'index', 'inline', 'size', 'norm', 'view']
-
-binary_elw = list(arith_op.keys()) + cmp_op
-unary_elw = math_op
-elementwise_op = binary_elw + unary_elw
-
-int_types = ['int', 'int32_t', 'int64_t']
-float_types = ['float', 'double']
 
 
 
@@ -38,8 +25,7 @@ def smaller(x, y):
     return TensorOp('smaller', x, y)
 
 
-# By default, the output of func should have the same size for any input, but they can have different sizes in the first dim if out_ofss is provided
-def apply(func, data: (list, tuple), axes=None, out_ofs=None, cond=None):
+def apply(func, data: (list, tuple), axes=None, cond=None):
     assert callable(func)
     nparam = len(inspect.signature(func).parameters)
     assert len(data) == nparam
@@ -47,7 +33,7 @@ def apply(func, data: (list, tuple), axes=None, out_ofs=None, cond=None):
         axes = []
     while (len(axes) < nparam):
         axes.append(Const(0, 'int'))
-    return TensorOp('apply', func, *data, *axes, out_ofs, cond)
+    return TensorOp('apply', func, *data, *axes, cond)
 
 
 def setval(val, name='', dest=None):
@@ -160,9 +146,9 @@ class Tensor(ASTNode):
         return TensorOp('index', self, idx)
 
 
-    def apply(self, func, axis=0, out_ofs=None, cond=None):
+    def apply(self, func, axis=0, cond=None):
         assert callable(func), 'apply func must be callable'
-        return TensorOp('apply', func, self, axis, out_ofs, cond)
+        return TensorOp('apply', func, self, axis, cond)
 
     # general reduction
     def reduce(self, func, init, axis=0):
@@ -459,18 +445,14 @@ class TensorOp(Tensor):
             dtype = ret.dtype
             ret.ref_by.append(self)
 
-            # handle output with offsets
-            out_ofs = self.operators[1 + 2 * self.nparams]
-            if out_ofs == None:
-                ref_size = [axis_size] + ret.ref_size
-            else:
-                ref_size = [out_ofs[axis_size]] + ret.ref_size[1:]
+            ref_size = [axis_size] + ret.ref_size
+
 
             self.operators.extend(data)
             self.operators.append(ret)
 
             # handle conditional apply
-            cond = self.operators[2 + 2 * self.nparams]
+            cond = self.operators[1 + 2 * self.nparams]
             if cond != None:
                 assert helpers.is_1d_tensor(cond)
                 assert helpers.has_same_value(axis_size, cond.ref_size[0])

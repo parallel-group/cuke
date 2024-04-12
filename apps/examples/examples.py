@@ -1604,13 +1604,13 @@ if __name__ == "__main__":
     # compression()
     # test_math1()
     # test_math2()
-    # apply_test1() # pass
-    # apply_test2() # pass
-    # apply_test3() # pass
-    # apply_test4() # pass
-    # apply_test5() # pass
-    # apply_test6() # pass
-    # apply_test7()  # pass
+    apply_test1() # pass
+    apply_test2() # pass
+    apply_test3() # pass
+    apply_test4() # pass
+    apply_test5() # pass
+    apply_test6() # pass
+    apply_test7()  # pass
     # apply_test8()
     # apply_test9()
     # apply_test10()

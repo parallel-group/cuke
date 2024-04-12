@@ -602,10 +602,10 @@ def gen_ir(node):
 
         elif node.op_type == 'apply':
 
-            # operators: func, data (node.nparams), axis (node.nparams), out_ofs, cond, items (node.nparams), ret, counter
+            # operators: func, data (node.nparams), axis (node.nparams), cond, items (node.nparams), ret, counter
 
-            # evaluate data, axis, out_ofs, cond
-            for i in range(1, 3 + 2 * node.nparams):
+            # evaluate data, axis, cond
+            for i in range(1, 2 + 2 * node.nparams):
                 if node.operators[i] != None:
                     gen_ir(node.operators[i])
 
@@ -613,7 +613,7 @@ def gen_ir(node):
             sizes =  helpers.get_ir_of_size(node.operators[1].ref_size)
 
             # this is the loop that iterates over the axis of the primary (first) tensor input
-            cond = node.operators[2 + 2 * node.nparams]
+            cond = node.operators[1 + 2 * node.nparams]
             if cond == None:
                 outer_loop = ir.Loop(0, sizes[primary_axis], 1, [])
             else:
@@ -648,7 +648,7 @@ def gen_ir(node):
 
                 real_subscripts = resolve_view(data, subscripts)
 
-                item = node.operators[3 + 2 * node.nparams + i]
+                item = node.operators[2 + 2 * node.nparams + i]
                 item.eval = bind(data.eval, real_subscripts)
 
                 if 'dim_map' in data.attr and 'size_map' in data.attr:
@@ -656,7 +656,7 @@ def gen_ir(node):
                                type(subscripts[ii]) == ir.Slice]
                     size_map = [data.attr['size_map'][ii] for ii in range(len(subscripts)) if
                                 type(subscripts[ii]) == ir.Slice]
-                    item = node.operators[3 + 2 * node.nparams + i]
+                    item = node.operators[2 + 2 * node.nparams + i]
                     tmp = list(range(len(real_subscripts)))
                     j = 0
                     for k in range(len(real_subscripts)):
@@ -715,8 +715,7 @@ def gen_ir(node):
             node.eval = ir.Ndarray(ret.eval.dtype, size)
             node.decl.append(ir.Decl(node.eval))
 
-            out_ofs = node.operators[1 + 2 * node.nparams]
-            res = bind(node.eval, [outer_loop.iterate]) if out_ofs == None else node.eval
+            res = bind(node.eval, [outer_loop.iterate])
             ret_eval = ret.attr['eval'] if 'eval' in ret.attr else ret.eval
             helpers.replace_all_ref(ret_compute, ret_eval, res)
             helpers.remove_decl(ret, ret_eval)
@@ -730,17 +729,8 @@ def gen_ir(node):
 
             node.compute = [outer_loop]
 
-            # if there is an offset for output storage
-            if out_ofs != None:
-                assert type(ret_compute[-1]) in (ir.Loop, ir.Assignment, ir.Code)
-                l = ret_compute[-1]
-                while (type(l) == ir.Loop):
-                    l = l.body[-1]
-                # But the index to the node.eval in res is incorrect, we need to change it according to the offset
-                helpers.rebind_iterate(l.lhs, ret_compute[-1].iterate,
-                               ir.Expr(ir.Indexing(out_ofs.eval, outer_loop.iterate), ret_compute[-1].iterate, '+'))
             # ret.eval is removed from the decl
-            node.decl = [d for d in node.decl if d.dobject != ret.eval]
+            node.decl = [d for d in node.decl if not helpers.same_object(d.dobject, ret.eval)]
 
             if cond != None:
                 counter = node.operators[-1].eval
