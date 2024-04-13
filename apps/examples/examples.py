@@ -1625,14 +1625,14 @@ if __name__ == "__main__":
     # view_apply_test4() # pass
 
 
-    # reduce_test1()  # pass
-    # reduce_test2()  # pass
-    # reduce_test3() # pass
-    reduce_test4() # pass
-    reduce_test5() # pass
-    reduce_test6() # pass
-    reduce_test7() # pass
-    reduce_test8() # pass
+    reduce_test1()  # pass
+    reduce_test2()  # pass
+    reduce_test3() # pass
+    # reduce_test4() # pass
+    # reduce_test5() # pass
+    # reduce_test6() # pass
+    # reduce_test7() # pass
+    # reduce_test8() # pass
     # reduce_test9() # pass
     # test_aggr1()
     # spmv()

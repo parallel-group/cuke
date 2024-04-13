@@ -9,7 +9,7 @@ def test_compressor():
     block_size = Var(name='block_size')
     nblocks = setval(1024//block_size, name='nblocks')
     input = Tensor((1024, ), name='input', dtype='float')
-    input = input.view((nblocks, block_size), [0, 1])
+    input = input.view((nblocks, block_size), [0, 0])
     quant = (input * 1000).round()
     lorenzo_res = quant[:, 0:32] - quant[:, -1:31]
     encode_nbits = lorenzo_res.abs().max(axis=1).nbits()
