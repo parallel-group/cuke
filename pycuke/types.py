@@ -13,3 +13,18 @@ elementwise_op = binary_elw + unary_elw
 
 int_types = ['int', 'int32_t', 'int64_t']
 float_types = ['float', 'double']
+
+def get_res_type(ltype, rtype, op):
+    # TODO: need more accurate type inference
+    if op == 'truediv':
+        return 'float'
+    elif op == 'floordiv':
+        return 'int'
+    else:
+        if ltype in int_types and rtype in int_types:
+           res = ltype
+        elif ltype in float_types:
+            res = ltype
+        else:
+            res = rtype
+        return res

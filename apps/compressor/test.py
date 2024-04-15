@@ -5,7 +5,7 @@ import torch
 import pycuke.run as run
 
 
-def test_compressor():
+def sz():
     block_size = Var(name='block_size')
     nblocks = setval(1024//block_size, name='nblocks')
     input = Tensor((1024, ), name='input', dtype='float')
@@ -22,5 +22,41 @@ def test_compressor():
     print(code)
 
 
+def regression():
+    block_size = Var(name='block_size')
+    nblocks = setval(1024 // block_size + 1, name='nblocks')
+    input = Tensor((1024,), name='input', dtype='float')
+    input = input.view((nblocks, block_size), [0, 0])
+    quant_res = (input * 1000).round()
+
+    res = quant_res.apply(lambda x: einsum('i,i->', x, Const(slice(1, block_size, 1), 'slice')))
+
+    code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
+
+
+def regression2():
+    dim_size = Var(name='dim_size')
+    block_size = dim_size * dim_size * dim_size
+    nblocks = setval(1024 // block_size + 1, name='nblocks')
+    input = Tensor((1024,), name='input', dtype='float')
+    input = input.view((nblocks, dim_size, dim_size, dim_size), [0, 0, 0, 0])
+    quant_res = (input * 1000).round()
+
+
+    tmp1 = quant_res.apply(lambda x: einsum('ijk,i->', x, Const(slice(1, block_size, 1), 'slice')))
+    tmp2 = quant_res.apply(lambda x: einsum('ijk,j->', x, Const(slice(1, block_size, 1), 'slice')))
+    tmp3 = quant_res.apply(lambda x: einsum('ijk,k->', x, Const(slice(1, block_size, 1), 'slice')))
+    tmp4 = quant_res.apply(lambda x: einsum('ijk,->', x, None))
+
+    coefficient = (tmp1 + tmp2 + tmp3) / tmp4
+
+    code = codegen.cpu.print_cpp(gen_ir(coefficient))
+    print(code)
+
+
+
 if __name__ == '__main__':
-    test_compressor()
+    sz()
+    regression()
+    regression2()

@@ -112,31 +112,31 @@ class Tensor(ASTNode):
         return TensorOp('sub', self, other)
 
     def __rsub__(self, other):
-        return self.__sub__(other)
+        return TensorOp('sub', other, self)
 
     def __add__(self, other):
         return TensorOp('add', self, other)
 
     def __radd__(self, other):
-        return self.__add__(other)
+        return TensorOp('add', other, self)
 
     def __mul__(self, other):
         return TensorOp('mul', self, other)
 
     def __rmul__(self, other):
-        return self.__mul__(other)
+        return TensorOp('mul', other, self)
 
     def __truediv__(self, other):
         return TensorOp('truediv', self, other)
 
     def __rtruediv__(self, other):
-        return self.__truediv__(other)
+        return TensorOp('truediv', other, self)
 
     def __floordiv__(self, other):
         return TensorOp('floordiv', self, other)
 
     def __rfloordiv__(self, other):
-        return self.__floordiv__(other)
+        return TensorOp('floordiv', other, self)
 
     def __matmul__(self, other):
         return TensorOp('einsum', self, other, 'ij,jk->ik')
@@ -276,7 +276,6 @@ class TensorOp(Tensor):
         assert op_type in TensorOp.Types
         self.op_type = op_type
 
-        # TODO: infer result data type
         self.operators = []
         for opr in operators:
             self.operators.append(opr)
@@ -284,20 +283,18 @@ class TensorOp(Tensor):
                 opr.ref_by.append(self)
 
         if op_type in arith_op or op_type in cmp_op:
-            # TODO: infer dtype
-            dtype = operators[0].dtype
             if type(self.operators[0]) == int:
-                # assert(dtype in int_types)
-                self.operators[0] = Const(self.operators[0], dtype)
+                self.operators[0] = Const(self.operators[0], 'int')
             elif type(operators[0]) == float:
-                # assert(dtype in float_types)
-                self.operators[0] = Const(self.operators[0], dtype)
+                self.operators[0] = Const(self.operators[0], 'float')
+
             if type(self.operators[1]) == int:
-                # assert(dtype in int_types)
-                self.operators[1] = Const(self.operators[1], dtype)
+                self.operators[1] = Const(self.operators[1], 'int')
             elif type(operators[1]) == float:
-                # assert(dtype in float_types)
-                self.operators[1] = Const(self.operators[1], dtype)
+                self.operators[1] = Const(self.operators[1], 'float')
+
+            dtype = get_res_type(self.operators[0].dtype, self.operators[1].dtype, op_type)
+
             assert helpers.prefix_match_size(self.operators[0]._size(), self.operators[1]._size())
             if (len(self.operators[0]._size()) > len(self.operators[1]._size())):
                 ref_size = self.operators[0]._size()

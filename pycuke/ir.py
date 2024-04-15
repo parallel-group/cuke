@@ -35,13 +35,8 @@ class Expr(IR):
         self.optional = optional
         self.op = op
         self.size = self.left.size
-        # TODO: need more accurate type inference
-        if left.dtype in int_types and right.dtype in int_types:
-            self.dtype = left.dtype
-        elif left.dtype in float_types:
-            self.dtype = left.dtype
-        else:
-            self.dtype = right.dtype
+        self.dtype = get_res_type(left.dtype, right.dtype, op)
+
 
 
 class Assignment(IR):
