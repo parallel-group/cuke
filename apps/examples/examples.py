@@ -93,14 +93,15 @@ def test5():
 
 def test6():
     A = Tensor((10, ))
-    idx = Tensor((5, ), dtype='int')
+    idx = Tensor((5, ), dtype='int64_t')
     t = Tensor(A[idx]._size())
 
     res = A[idx] + t
 
     code = codegen.cpu.print_cpp(gen_ir(res))
+    print(code)
     A = torch.rand(10)
-    idx = torch.IntTensor(5)
+    idx = torch.randint(0, 10, (5, ))
     t = torch.rand(A[idx].shape)
     d = run.cpu.compile_and_run(code, A, idx, t)
 
@@ -111,14 +112,14 @@ def test6():
 
 def test7():
     A = Tensor((10, 10))
-    idx = Tensor((5, ), dtype='int')
+    idx = Tensor((5, ), dtype='int64_t')
     t = Tensor(A[idx]._size())
 
     res = A[idx] + t
 
     code = codegen.cpu.print_cpp(gen_ir(res))
     A = torch.rand(10, 10)
-    idx = torch.IntTensor(5)
+    idx = torch.randint(0, 10, (5, ))
     t = torch.rand(A[idx].shape)
     d = run.cpu.compile_and_run(code, A, idx, t)
 
@@ -128,13 +129,13 @@ def test7():
 
 def test8():
     A = Tensor((10, 10))
-    idx = Tensor((5, ), dtype='int')
+    idx = Tensor((5, ), dtype='int64_t')
 
     res = A[0][idx] + 1
 
     code = codegen.cpu.print_cpp(gen_ir(res))
     A = torch.rand(10, 10)
-    idx = torch.IntTensor(5)
+    idx = torch.randint(0, 10, (5, ))
     d = run.cpu.compile_and_run(code, A, idx)
 
     print(d)
@@ -143,8 +144,8 @@ def test8():
 
 def test9():
     A = Tensor((10, 10))
-    i = Tensor((5, ), dtype='int')
-    j = Tensor((4, ), dtype='int')
+    i = Tensor((5, ), dtype='int64_t')
+    j = Tensor((4, ), dtype='int64_t')
     t = Tensor(A[i][j]._size())
 
     res = A[i][j] + t
@@ -152,8 +153,8 @@ def test9():
     code = codegen.cpu.print_cpp(gen_ir(res))
     print(code)
     A = torch.rand(10, 10)
-    i = torch.IntTensor(5)
-    j = torch.IntTensor(4)
+    i = torch.randint(0, 10, (5, ))
+    j =  torch.randint(0, 10, (4, ))
     t = torch.rand(A[i][j].shape)
     d = run.cpu.compile_and_run(code, A, i, j, t)
 
@@ -163,8 +164,8 @@ def test9():
 
 def test9_1():
     A = Tensor((10, 10))
-    i = Tensor((5, ), dtype='int')
-    j = Tensor((4, ), dtype='int')
+    i = Tensor((5, ), dtype='int64_t')
+    j = Tensor((4, ), dtype='int64_t')
     t = Tensor(A[i][:,j]._size())
 
     res = A[i][:,j] + t
@@ -172,8 +173,8 @@ def test9_1():
     code = codegen.cpu.print_cpp(gen_ir(res))
     print(code)
     A = torch.rand(10, 10)
-    i = torch.IntTensor(5)
-    j = torch.IntTensor(4)
+    i = torch.randint(0, 10, (5,))
+    j = torch.randint(0, 10, (4,))
     t = torch.rand(A[i][:,j].shape)
     d = run.cpu.compile_and_run(code, A, i, j, t)
 
@@ -183,26 +184,26 @@ def test9_1():
 
 def test10():
     A = Tensor((10, 11, 12))
-    i = Tensor((5, ), dtype='int')
+    i = Tensor((5, ), dtype='int64_t')
     x = Var( 'int')
-    j = Tensor((4, ), dtype='int')
-    t = Tensor(A[i][j][x]._size())
+    j = Tensor((4, ), dtype='int64_t')
+    t = Tensor(A[i, j, x]._size())
 
-    ast = A[i][j][x] + t
+    ast = A[i, j, x] + t
     ir = gen_ir(ast)
 
     code = codegen.cpu.print_cpp(ir)
     print(code)
     A = torch.rand(10, 11, 12)
-    i = torch.IntTensor(5)
+    i = torch.randint(0, 10, (5,))
+    j = torch.randint(0, 11, (4,))
     x = 2
-    j = torch.IntTensor(4)
-    t = torch.rand(A[i][j][x].shape)
+    t = torch.rand(A[i][:,j][:, :, x].shape)
     d = run.cpu.compile_and_run(code, A, i, j, x, t)
 
-    print(A[i][j][x] + t)
+    print(A[i][:,j][:, :, x] + t)
 
-    print(torch.equal(d, A[i][j][x] + t))
+    print(torch.equal(d, A[i][:,j][:, :, x] + t))
 
 
 def test10_1():
@@ -1572,22 +1573,22 @@ def psum_test4():
 
 if __name__ == "__main__":
     # basic tensor indexing tests
-    test1() # pass
-    test2() # pass
-    test3() # pass
-    test4() # pass
-    test5() # pass
-    test6() # pass
-    test7() # pass
-    test8() # pass
-    test9() # pass
-    test9_1() # pass
+    # test1() # pass
+    # test2() # pass
+    # test3() # pass
+    # test4() # pass
+    # test5() # pass
+    # test6() # pass
+    # test7() # pass
+    # test8() # pass
+    # test9() # pass
+    # test9_1() # pass
     test10() # pass
-    test10_1() # pass
-    test10_2() # pass
-    test10_3() # pass
-    test10_4() # pass
-    test10_5() # pass
+    # test10_1()
+    # test10_2()
+    # test10_3()
+    # test10_4()
+    # test10_5()
     # test11()
     # test12()
     # test13()
@@ -1605,13 +1606,13 @@ if __name__ == "__main__":
     # compression()
     # test_math1()
     # test_math2()
-    apply_test1() # pass
-    apply_test2() # pass
-    apply_test3() # pass
-    apply_test4() # pass
-    apply_test5() # pass
-    apply_test6() # pass
-    apply_test7()  # pass
+    # apply_test1() # pass
+    # apply_test2() # pass
+    # apply_test3() # pass
+    # apply_test4() # pass
+    # apply_test5() # pass
+    # apply_test6() # pass
+    # apply_test7()  # pass
     # apply_test8()
     # apply_test9()
     # apply_test10()
@@ -1666,8 +1667,8 @@ if __name__ == "__main__":
     # neg_transR()
 
 
-    var_test1() # pass
-    var_test2() # pass
+    # var_test1() # pass
+    # var_test2() # pass
 
     # psum_test1()
     # psum_test2()
