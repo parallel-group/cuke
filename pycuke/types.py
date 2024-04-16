@@ -5,7 +5,7 @@ arith_op = {'add': '+', 'sub': '-', 'mul': '*', 'floordiv': '/', 'truediv': '/',
 math_op = ['round', 'abs', 'nbits']
 cmp_op = ['bigger', 'smaller']
 func_op = ['apply', 'reduce', 'aggr']
-other_op = ['setval', 'einsum', 'index', 'inline', 'size', 'norm', 'view']
+other_op = ['setval', 'einsum', 'index', 'inline', 'size', 'norm', 'view', 'mklist']
 
 binary_elw = list(arith_op.keys()) + cmp_op
 unary_elw = math_op
@@ -14,7 +14,14 @@ elementwise_op = binary_elw + unary_elw
 int_types = ['int', 'int32_t', 'int64_t']
 float_types = ['float', 'double']
 
-def get_res_type(ltype, rtype, op):
+#https://github.com/pytorch/pytorch/blob/main/torch/csrc/api/include/torch/types.h
+type_map = {'int': 'kInt',
+            'int32_t': 'kInt',
+            'int64_t': 'kLong',
+            'float': 'kFloat',
+            'double': 'kDouble'}
+
+def get_expr_type(ltype, rtype, op):
     # TODO: need more accurate type inference
     if op == 'truediv':
         return 'float'

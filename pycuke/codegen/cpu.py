@@ -1,33 +1,20 @@
-from .. import transform
-from ..helpers import collect_ir, get_input_nodes
+from pycuke import transform
+from pycuke.helpers import collect_ir, get_input_nodes
 import random
 import string
 import os
-from .. import asg, ir
+from pycuke import asg, ir
+from pycuke.types import *
 
-#https://github.com/pytorch/pytorch/blob/main/torch/csrc/api/include/torch/types.h
-type_map = {'int': 'kInt', 
-            'int32_t': 'kInt',
-            'int64_t': 'kLong',
-            'float': 'kFloat',
-            'double': 'kDouble'}
-
-def get_dtype(expr):
-    if isinstance(expr, ir.Expr):
-        return get_dtype(expr.left)
-    elif isinstance(expr, ir.DObject):
-        return expr.dtype
-    else:
-        return 'int64_t'
 
 def to_string(stmt):
     if isinstance(stmt, ir.Expr):
             if stmt.op in asg.arith_op.values():
-                return f"({to_string(stmt.left)}" + f" {stmt.op} " + f"{to_string(stmt.right)})"
+                return f"(({to_string(stmt.left)})" + f" {stmt.op} " + f"({to_string(stmt.right)}))"
             elif stmt.op == 'bigger':
-                return f"({to_string(stmt.left)} > {to_string(stmt.right)} ? ({to_string(stmt.left)}) : ({to_string(stmt.right)}))"
+                return f"(({to_string(stmt.left)}) > ({to_string(stmt.right)}) ? ({to_string(stmt.left)}) : ({to_string(stmt.right)}))"
             elif stmt.op == 'smaller':
-                return f"({to_string(stmt.left)} < {to_string(stmt.right)} ? ({to_string(stmt.left)}) : ({to_string(stmt.right)}))"
+                return f"(({to_string(stmt.left)}) < ({to_string(stmt.right)}) ? ({to_string(stmt.left)}) : ({to_string(stmt.right)}))"
     elif isinstance(stmt, ir.Assignment):
             if stmt.op is None:
                 return f"{to_string(stmt.lhs)} = {to_string(stmt.rhs)};\n"
@@ -37,7 +24,7 @@ def to_string(stmt):
             code = ''
             if stmt.attr['ptype'] == 'naive' and 'plevel' in stmt.attr and 'nprocs' in stmt.attr:
                 code += f"#pragma omp parallel for num_threads({stmt.attr['nprocs'][stmt.attr['plevel']][0]})\n"
-            code += f"for ({get_dtype(stmt.end)} {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
+            code += f"for (int {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
             for e in stmt.cond_body:
                 if e:
                     code += to_string(e)
@@ -52,7 +39,7 @@ def to_string(stmt):
             code = ''
             if stmt.attr['ptype'] in ['naive', 'reduction'] and 'plevel' in stmt.attr and 'nprocs' in stmt.attr:
                 code += f"#pragma omp parallel for num_threads({stmt.attr['nprocs'][stmt.attr['plevel']][0]})\n"
-            code += f"for ({get_dtype(stmt.end)} {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
+            code += f"for (int {to_string(stmt.iterate)} = {to_string(stmt.start)}; {to_string(stmt.iterate)} < {to_string(stmt.end)}; {to_string(stmt.iterate)} += {to_string(stmt.step)}) {{\n"
             for e in stmt.body:
                 if e:
                     code += to_string(e)
@@ -107,6 +94,35 @@ def to_string(stmt):
             return str(stmt)
 
 
+def ret_type(node):
+    if node.eval == None:
+        if node.dtype == 'list':
+            rtl = []
+            cl = []
+            for opr in node.operators:
+                rt, c = ret_type(opr)
+                rtl.append(rt)
+                cl.append(c)
+            rtype = f'std::tuple<{", ".join(rtl)}>'
+            code = f'{{{", ".join(cl)}}}'
+        else:
+            raise TypeError("return type error1")
+
+    elif type(node.eval) == ir.Scalar:
+        rtype = node.dtype
+        code = f'{node.eval.name()}'
+    elif type(node.eval) == ir.Ndarray:
+        rtype = 'torch::Tensor'
+        code = f'obj_{node.eval.name()}'
+    else:
+        raise TypeError("return type error2")
+
+    return rtype, code
+
+
+
+
+
 def print_cpp(node):
 
     for p in transform.passes:
@@ -134,15 +150,8 @@ def print_cpp(node):
             code += to_string(d)
 
 
-    if type(node.eval) == ir.Scalar:
-        rtype = node.dtype
-        code += f'return {node.eval.name()};\n'
-    elif type(node.eval) == ir.Ndarray:
-        rtype = 'torch::Tensor'
-        code += f'return obj_{node.eval.name()};\n'
-    else:
-        rtype = 'void'
-        # raise TypeError('wrong output type', node.eval)
+    rtype, ret = ret_type(node)
+    code += f'return {ret};\n'
 
     with open(f'{os.path.dirname(__file__)}/cpp_template.txt', 'r') as f:
         c_code = f.read()

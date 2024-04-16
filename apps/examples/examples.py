@@ -68,8 +68,9 @@ def test4():
     i = Var('int')
     t = Var(A.dtype)
 
-    ast = A[i] + t
+    ast = setval(A[i] + t)
     code = codegen.cpu.print_cpp(gen_ir(ast))
+    print(code)
 
     A = torch.rand(10)
     i = 1
@@ -1571,22 +1572,22 @@ def psum_test4():
 
 if __name__ == "__main__":
     # basic tensor indexing tests
-    # test1() # pass
-    # test2() # pass
-    # test3() # pass
-    # test4() # pass
-    # test5() # pass
-    # test6() # pass
-    # test7() # pass
-    # test8() # pass
-    # test9() # pass
-    # test9_1() # pass
-    # test10() # pass
-    # test10_1() # pass
-    # test10_2() # pass
-    # test10_3() # pass
-    # test10_4() # pass
-    # test10_5() # pass
+    test1() # pass
+    test2() # pass
+    test3() # pass
+    test4() # pass
+    test5() # pass
+    test6() # pass
+    test7() # pass
+    test8() # pass
+    test9() # pass
+    test9_1() # pass
+    test10() # pass
+    test10_1() # pass
+    test10_2() # pass
+    test10_3() # pass
+    test10_4() # pass
+    test10_5() # pass
     # test11()
     # test12()
     # test13()
@@ -1625,9 +1626,9 @@ if __name__ == "__main__":
     # view_apply_test4() # pass
 
 
-    reduce_test1()  # pass
-    reduce_test2()  # pass
-    reduce_test3() # pass
+    # reduce_test1()  # pass
+    # reduce_test2()  # pass
+    # reduce_test3() # pass
     # reduce_test4() # pass
     # reduce_test5() # pass
     # reduce_test6() # pass
@@ -1665,8 +1666,8 @@ if __name__ == "__main__":
     # neg_transR()
 
 
-    # var_test1() # pass
-    # var_test2() # pass
+    var_test1() # pass
+    var_test2() # pass
 
     # psum_test1()
     # psum_test2()

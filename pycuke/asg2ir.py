@@ -938,9 +938,15 @@ def gen_ir(node):
             node.decl = [ir.Decl(node.eval)]
             node.compute = [ir.Assignment(node.eval, node.operators[0].eval.size[axis])]
 
+        elif node.op_type == 'mklist':
+            for opr in node.operators:
+                gen_ir(opr)
+
+
         # TODO: (Lihan) what does this do? what is the storage attribute?
         # storage attr stores all the other representations of current node.eval, it is used in parallelize.py
-        node.eval.attr['storage'] = []
+        if node.eval != None:
+            node.eval.attr['storage'] = []
 
 
 

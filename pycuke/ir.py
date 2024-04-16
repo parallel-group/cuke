@@ -35,7 +35,7 @@ class Expr(IR):
         self.optional = optional
         self.op = op
         self.size = self.left.size
-        self.dtype = get_res_type(left.dtype, right.dtype, op)
+        self.dtype = get_expr_type(left.dtype, right.dtype, op)
 
 
 

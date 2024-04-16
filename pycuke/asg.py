@@ -78,6 +78,9 @@ def inline(src, output=[], inputs=[]):
 def einsum(exp: str, tensor1, tensor2):
     return TensorOp('einsum', tensor1, tensor2, exp)
 
+def mklist(*args):
+    return TensorOp('mklist', *args)
+
 class ASTNode:
     nuniq = 0
 
@@ -293,7 +296,7 @@ class TensorOp(Tensor):
             elif type(operators[1]) == float:
                 self.operators[1] = Const(self.operators[1], 'float')
 
-            dtype = get_res_type(self.operators[0].dtype, self.operators[1].dtype, op_type)
+            dtype = get_expr_type(self.operators[0].dtype, self.operators[1].dtype, op_type)
 
             assert helpers.prefix_match_size(self.operators[0]._size(), self.operators[1]._size())
             if (len(self.operators[0]._size()) > len(self.operators[1]._size())):
@@ -554,6 +557,10 @@ class TensorOp(Tensor):
                 self.operators[1] = Const(self.operators[1], 'int')
             axis = self.operators[1].val
             assert axis < len(self.operators[0]._size())
+
+        elif op_type == 'mklist':
+            dtype = 'list'
+            ref_size = []
 
 
         super().__init__(ref_size, dtype, name = f'{op_type}_' + '_'.join([op.name if (hasattr(op, 'name') and op.name != None) else '' for op in self.operators]))

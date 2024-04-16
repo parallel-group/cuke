@@ -16,6 +16,7 @@ def sz():
     ofs = encode_nbits.prefix_sum(inclusive=False)
 
     res = inline('encoding(DATA, OFS);', [('DATA', lorenzo_res)], [('DATA', lorenzo_res), ('OFS', ofs)])
+    res = mklist(res, ofs)
 
     code = codegen.cpu.print_cpp(gen_ir(res))
 
@@ -49,14 +50,19 @@ def regression2():
     tmp3 = quant_res.apply(lambda x: einsum('ijk,k->', x, Const(slice(1, block_size, 1), 'slice')))
     tmp4 = quant_res.apply(lambda x: einsum('ijk,->', x, None))
 
-    coefficient = (tmp1 + tmp2 + tmp3) / tmp4
+    tmp = tmp1 + tmp2
+    coefficient1 = tmp + tmp3
+    coefficient2 = tmp + tmp4
 
-    code = codegen.cpu.print_cpp(gen_ir(coefficient))
+    res = mklist(coefficient1, coefficient2)
+
+
+    code = codegen.cpu.print_cpp(gen_ir(res))
     print(code)
 
 
 
 if __name__ == '__main__':
-    sz()
-    regression()
+    # sz()
+    # regression()
     regression2()
