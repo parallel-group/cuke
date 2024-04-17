@@ -425,12 +425,12 @@ def gen_ir(node):
                 pos2 = input2.find(i)
                 if (pos1 >= 0 and pos2 < 0):
                     mapping[i] = len(all_loops)
-                    l = ir.Loop(0, node.operators[0].eval.ref_size(pos1), 1, [])
+                    l = ir.Loop(0, node.operators[0].ref_size[pos1].eval, 1, [])
                     all_loops.append(l)
                     node.input_orders[0].append((len(node.input_orders[0]), l))
                 elif (pos1 < 0 and pos2 >= 0):
                     mapping[i] = len(all_loops)
-                    l = ir.Loop(0, node.operators[1].eval.ref_size(pos2), 1, [])
+                    l = ir.Loop(0, node.operators[1].ref_size[pos2].eval, 1, [])
                     all_loops.append(l)
                     node.input_orders[1].append((len(node.input_orders[1]), l))
 
@@ -441,12 +441,12 @@ def gen_ir(node):
                 pos2 = input2.find(i)
                 if (pos1 >= 0 and pos2 < 0):
                     mapping[i] = len(all_loops)
-                    l = ir.Loop(0, node.operators[0].eval.ref_size(pos1), 1, [])
+                    l = ir.Loop(0, node.operators[0].ref_size[pos1].eval, 1, [])
                     all_loops.append(l)
                     node.input_orders[0].append((len(node.input_orders[0]), l))
                 elif (pos1 < 0 and pos2 >= 0):
                     mapping[i] = len(all_loops)
-                    l = ir.Loop(0, node.operators[1].eval.ref_size(pos2), 1, [])
+                    l = ir.Loop(0, node.operators[1].ref_size[pos2].eval, 1, [])
                     all_loops.append(l)
                     node.input_orders[1].append((len(node.input_orders[1]), l))
 
@@ -455,7 +455,7 @@ def gen_ir(node):
                 pos2 = input2.find(i)
                 if pos1 >= 0 and pos2 >= 0:
                     mapping[i] = len(all_loops)
-                    l = ir.Loop(0, node.operators[0].eval.ref_size(pos1), 1, [])
+                    l = ir.Loop(0, node.operators[0].ref_size[pos1].eval, 1, [])
                     all_loops.append(l)
                     node.input_orders[0].append((len(node.input_orders[0]), l))
                     node.input_orders[1].append((len(node.input_orders[1]), l))

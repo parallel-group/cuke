@@ -45,9 +45,9 @@ def regression2():
     quant_res = (input * 1000).round()
 
 
-    tmp1 = quant_res.apply(lambda x: einsum('ijk,i->', x, Const(slice(1, block_size, 1), 'slice')))
-    tmp2 = quant_res.apply(lambda x: einsum('ijk,j->', x, Const(slice(1, block_size, 1), 'slice')))
-    tmp3 = quant_res.apply(lambda x: einsum('ijk,k->', x, Const(slice(1, block_size, 1), 'slice')))
+    tmp1 = quant_res.apply(lambda x: einsum('ijk,i->', x, Const(slice(1, dim_size, 1), 'slice')))
+    tmp2 = quant_res.apply(lambda x: einsum('ijk,j->', x, Const(slice(1, dim_size, 1), 'slice')))
+    tmp3 = quant_res.apply(lambda x: einsum('ijk,k->', x, Const(slice(1, dim_size, 1), 'slice')))
     tmp4 = quant_res.apply(lambda x: einsum('ijk,->', x, None))
 
     tmp = tmp1 + tmp2
