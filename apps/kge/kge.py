@@ -1,10 +1,10 @@
-from pycuke import transform, run
-from pycuke.codegen import *
-from pycuke.helpers import ASGTraversal, IRTraversal, flatten, get_obj
-from pycuke.transform.fuse import basic_rule, fuse_operators
-from pycuke.asg import *
-from pycuke.asg2ir import gen_ir
-from pycuke.ir import *
+from pycuke1 import transform, run
+from pycuke1.codegen import *
+from pycuke1.helpers import ASGTraversal, IRTraversal, flatten, get_obj
+from pycuke1.transform.fuse import basic_rule, fuse_operators
+from pycuke1.asg import *
+from pycuke1.asg2ir import gen_ir
+from pycuke1.ir import *
 import os
 
 import torch
