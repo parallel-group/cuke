@@ -1,0 +1,2 @@
+def FNAME(ARGS):
+CODE

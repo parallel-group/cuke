@@ -3,4 +3,4 @@
 */__pycache__/*
 __pycache__/*
 cmake-build-debug/*
-pycuke/run/.tmp/*
+cuke/run/.tmp/*

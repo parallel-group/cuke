@@ -1,11 +1,11 @@
 import torch
 
-import pycuke.helpers as helpers
-import pycuke.transform as transform
-from pycuke.asg import Tensor, Var, apply, bigger, setval, einsum
-from pycuke.asg2ir import gen_ir
-import pycuke.codegen as codegen
-import pycuke.run as run
+import helpers
+import transform
+from asg import Tensor, Var, apply, bigger, setval, einsum
+from asg2ir import gen_ir
+import codegen
+import run
 
 
 def test1():
@@ -68,9 +68,8 @@ def test4():
     i = Var('int')
     t = Var(A.dtype)
 
-    ast = setval(A[i] + t)
+    ast = A[i] + t
     code = codegen.cpu.print_cpp(gen_ir(ast))
-    print(code)
 
     A = torch.rand(10)
     i = 1
@@ -93,15 +92,14 @@ def test5():
 
 def test6():
     A = Tensor((10, ))
-    idx = Tensor((5, ), dtype='int64_t')
+    idx = Tensor((5, ), dtype='int')
     t = Tensor(A[idx]._size())
 
     res = A[idx] + t
 
     code = codegen.cpu.print_cpp(gen_ir(res))
-    print(code)
     A = torch.rand(10)
-    idx = torch.randint(0, 10, (5, ))
+    idx = torch.IntTensor(5)
     t = torch.rand(A[idx].shape)
     d = run.cpu.compile_and_run(code, A, idx, t)
 
@@ -112,14 +110,14 @@ def test6():
 
 def test7():
     A = Tensor((10, 10))
-    idx = Tensor((5, ), dtype='int64_t')
+    idx = Tensor((5, ), dtype='int')
     t = Tensor(A[idx]._size())
 
     res = A[idx] + t
 
     code = codegen.cpu.print_cpp(gen_ir(res))
     A = torch.rand(10, 10)
-    idx = torch.randint(0, 10, (5, ))
+    idx = torch.IntTensor(5)
     t = torch.rand(A[idx].shape)
     d = run.cpu.compile_and_run(code, A, idx, t)
 
@@ -129,13 +127,13 @@ def test7():
 
 def test8():
     A = Tensor((10, 10))
-    idx = Tensor((5, ), dtype='int64_t')
+    idx = Tensor((5, ), dtype='int')
 
     res = A[0][idx] + 1
 
     code = codegen.cpu.print_cpp(gen_ir(res))
     A = torch.rand(10, 10)
-    idx = torch.randint(0, 10, (5, ))
+    idx = torch.IntTensor(5)
     d = run.cpu.compile_and_run(code, A, idx)
 
     print(d)
@@ -144,8 +142,8 @@ def test8():
 
 def test9():
     A = Tensor((10, 10))
-    i = Tensor((5, ), dtype='int64_t')
-    j = Tensor((4, ), dtype='int64_t')
+    i = Tensor((5, ), dtype='int')
+    j = Tensor((4, ), dtype='int')
     t = Tensor(A[i][j]._size())
 
     res = A[i][j] + t
@@ -153,8 +151,8 @@ def test9():
     code = codegen.cpu.print_cpp(gen_ir(res))
     print(code)
     A = torch.rand(10, 10)
-    i = torch.randint(0, 10, (5, ))
-    j =  torch.randint(0, 10, (4, ))
+    i = torch.IntTensor(5)
+    j = torch.IntTensor(4)
     t = torch.rand(A[i][j].shape)
     d = run.cpu.compile_and_run(code, A, i, j, t)
 
@@ -164,8 +162,8 @@ def test9():
 
 def test9_1():
     A = Tensor((10, 10))
-    i = Tensor((5, ), dtype='int64_t')
-    j = Tensor((4, ), dtype='int64_t')
+    i = Tensor((5, ), dtype='int')
+    j = Tensor((4, ), dtype='int')
     t = Tensor(A[i][:,j]._size())
 
     res = A[i][:,j] + t
@@ -173,8 +171,8 @@ def test9_1():
     code = codegen.cpu.print_cpp(gen_ir(res))
     print(code)
     A = torch.rand(10, 10)
-    i = torch.randint(0, 10, (5,))
-    j = torch.randint(0, 10, (4,))
+    i = torch.IntTensor(5)
+    j = torch.IntTensor(4)
     t = torch.rand(A[i][:,j].shape)
     d = run.cpu.compile_and_run(code, A, i, j, t)
 
@@ -184,26 +182,26 @@ def test9_1():
 
 def test10():
     A = Tensor((10, 11, 12))
-    i = Tensor((5, ), dtype='int64_t')
+    i = Tensor((5, ), dtype='int')
     x = Var( 'int')
-    j = Tensor((4, ), dtype='int64_t')
-    t = Tensor(A[i, j, x]._size())
+    j = Tensor((4, ), dtype='int')
+    t = Tensor(A[i][j][x]._size())
 
-    ast = A[i, j, x] + t
+    ast = A[i][j][x] + t
     ir = gen_ir(ast)
 
     code = codegen.cpu.print_cpp(ir)
     print(code)
     A = torch.rand(10, 11, 12)
-    i = torch.randint(0, 10, (5,))
-    j = torch.randint(0, 11, (4,))
+    i = torch.IntTensor(5)
     x = 2
-    t = torch.rand(A[i][:,j][:, :, x].shape)
+    j = torch.IntTensor(4)
+    t = torch.rand(A[i][j][x].shape)
     d = run.cpu.compile_and_run(code, A, i, j, x, t)
 
-    print(A[i][:,j][:, :, x] + t)
+    print(A[i][j][x] + t)
 
-    print(torch.equal(d, A[i][:,j][:, :, x] + t))
+    print(torch.equal(d, A[i][j][x] + t))
 
 
 def test10_1():
@@ -1083,98 +1081,54 @@ def test26():
     print(res, torch.sum(A))
 
 def reduce_test1():
-    A = Tensor((10, 20))
-    res = A.sum(axis=0)
-    code = codegen.cpu.print_cpp(gen_ir(res))
+    A = Tensor('a', (10, 20))
+    # ast = A.reduce(lambda a,b: a+b, lambda res: setval(res, 0), axis=1)
+    ast = A.sum(axis=1)
+    ir = gen_ir(ast)
+    print(helpers.get_input_nodes(ir))
+    code = codegen.cpu.print_cpp(ir)
     print(code)
 
     A = torch.rand(10, 20)
     res = run.cpu.compile_and_run(code, A)
-    print(res - torch.sum(A, dim=0))
-
+    print(res - torch.sum(A, dim=1))
 
 def reduce_test2():
-    A = Tensor((10, 20))
-    res = A.sum(axis=1)
-    code = codegen.cpu.print_cpp(gen_ir(res))
+    A = Tensor('a', (10, 20, 5))
+    ast = A.sum(axis=1)
+    ir = gen_ir(ast)
+    print(helpers.get_input_nodes(ir))
+    code = codegen.cpu.print_cpp(ir)
+
     print(code)
 
-    A = torch.rand(10, 20)
+    A = torch.rand(10, 20, 5)
     res = run.cpu.compile_and_run(code, A)
     print(res - torch.sum(A, dim=1))
+
 
 def reduce_test3():
-    A = Tensor((10, 20, 5))
-    res = A.sum(axis=1)
-    code = codegen.cpu.print_cpp(gen_ir(res))
-
-    print(code)
-
-    A = torch.rand(10, 20, 5)
-    res = run.cpu.compile_and_run(code, A)
-    print(res - torch.sum(A, dim=1))
-
-
-def reduce_test4():
-    A = Tensor((10, 20, 5))
-    res = A.max(axis=0)
-    code = codegen.cpu.print_cpp(gen_ir(res))
-    print(code)
-
-    A = torch.rand(10, 20, 5)
-    res = run.cpu.compile_and_run(code, A)
-    print(res - torch.max(A, dim=0).values)
-
-
-def reduce_test5():
-    A = Tensor((10, 20, 5))
-    res = A.max(axis=1)
-    code = codegen.cpu.print_cpp(gen_ir(res))
-    print(code)
+    A = Tensor('a', (10, 20, 5))
+    ast = A.max(axis=1)
+    ir = gen_ir(ast)
+    print(helpers.get_input_nodes(ir))
+    code = codegen.cpu.print_cpp(ir)
 
     A = torch.rand(10, 20, 5)
     res = run.cpu.compile_and_run(code, A)
     print(res - torch.max(A, dim=1).values)
 
-def reduce_test6():
-    A = Tensor((10, 20, 5))
-    res = A.max(axis=2)
-    code = codegen.cpu.print_cpp(gen_ir(res))
-    print(code)
 
-    A = torch.rand(10, 20, 5)
-    res = run.cpu.compile_and_run(code, A)
-    print(res - torch.max(A, dim=2).values)
-
-def reduce_test7():
-    A = Tensor((10, 20))
-    res = A.min(axis=0)
-    code = codegen.cpu.print_cpp(gen_ir(res))
-    print(code)
-
-    A = torch.rand(10, 20)
-    res = run.cpu.compile_and_run(code, A)
-    print(res - torch.min(A, dim=0).values)
-
-def reduce_test8():
-    A = Tensor((10, ))
-    res = A.min(axis=0)
-    code = codegen.cpu.print_cpp(gen_ir(res))
-    print(code)
+def reduce_test4():
+    A = Tensor('a', (10,))
+    ast = A.max()
+    ir = gen_ir(ast)
+    print(helpers.get_input_nodes(ir))
+    code = codegen.cpu.print_cpp(ir)
 
     A = torch.rand(10, )
     res = run.cpu.compile_and_run(code, A)
-    print(res - torch.min(A, dim=0).values)
-
-def reduce_test9():
-    A = Tensor((10, ))
-    res = A.max(axis=0)
-    code = codegen.cpu.print_cpp(gen_ir(res))
-    print(code)
-
-    A = torch.rand(10, )
-    res = run.cpu.compile_and_run(code, A)
-    print(res - torch.max(A, dim=0).values)
+    print(res - torch.max(A))
 
 def test29():
     A = Tensor('A', (10, ))
@@ -1547,30 +1501,6 @@ def var_test2():
     print(code)
 
 
-def psum_test1():
-    data = Tensor((10, 20))
-    res = data.prefix_sum(axis=0, inclusive=True)
-    code = codegen.cpu.print_cpp(gen_ir(res))
-    print(code)
-
-def psum_test2():
-    data = Tensor((10, 20))
-    res = data.prefix_sum(axis=0, inclusive=False)
-    code = codegen.cpu.print_cpp(gen_ir(res))
-    print(code)
-
-def psum_test3():
-    data = Tensor((10, 20))
-    res = data.prefix_sum(axis=1, inclusive=True)
-    code = codegen.cpu.print_cpp(gen_ir(res))
-    print(code)
-
-def psum_test4():
-    data = Tensor((10, 20))
-    res = data.prefix_sum(axis=1, inclusive=False)
-    code = codegen.cpu.print_cpp(gen_ir(res))
-    print(code)
-
 if __name__ == "__main__":
     # basic tensor indexing tests
     # test1() # pass
@@ -1583,17 +1513,17 @@ if __name__ == "__main__":
     # test8() # pass
     # test9() # pass
     # test9_1() # pass
-    test10() # pass
-    # test10_1()
-    # test10_2()
-    # test10_3()
-    # test10_4()
-    # test10_5()
-    # test11()
-    # test12()
-    # test13()
-    # test13_1()
-    # test14()
+    # test10() # pass
+    # test10_1() # pass
+    # test10_2() # pass
+    # test10_3() # pass
+    # test10_4() # pass
+    # test10_5() # pass
+    test11()
+    test12()
+    test13()
+    test13_1()
+    test14()
     # some slicing examples
     # test15()
     # test16()
@@ -1627,15 +1557,10 @@ if __name__ == "__main__":
     # view_apply_test4() # pass
 
 
-    # reduce_test1()  # pass
-    # reduce_test2()  # pass
-    # reduce_test3() # pass
-    # reduce_test4() # pass
-    # reduce_test5() # pass
-    # reduce_test6() # pass
-    # reduce_test7() # pass
-    # reduce_test8() # pass
-    # reduce_test9() # pass
+    # reduce_test1()
+    # reduce_test2()
+    # reduce_test3()
+    # reduce_test4()
     # test_aggr1()
     # spmv()
     # test_einsum1()
@@ -1667,10 +1592,6 @@ if __name__ == "__main__":
     # neg_transR()
 
 
+    #
     # var_test1() # pass
     # var_test2() # pass
-
-    # psum_test1()
-    # psum_test2()
-    # psum_test3()
-    # psum_test4()

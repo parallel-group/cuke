@@ -11,7 +11,7 @@ conda activate cuke
 ```
 Check out and install this repository:
 ```cmd
-git clone https://github.com/idislab/cuke.git
+git clone https://github.com/pengjiang-hpc/cuke
 cd cuke
 pip install .
 ```
@@ -79,11 +79,11 @@ More examples can be found in the ``apps`` folder.
 
 A: The main difference is that cuke is a compiler. Instead of calling pre-compiled code, it generates source code (e.g., C++, CUDA) that runs on different hardware. The code generation is achieved through an intermediate representation, which allows users to apply various optimization transformations, such as loop fusion, parallelization, data buffering, etc. As a result, the generated code often achieves better performance than library-based solutions. Extending cuke to support new hardware is also much easier as it only requires implementation of a new backend. 
 
-**Q: How is cuke different from ML compilers such as TVM/XLA?**
+**Q: How is cuke different from ML compilers such as TVM/XLA/TorchScript?**
 
-A: Cuke is more focused on supporting applications with irregular computation and memory access patterns. Its main differences with TVM/XLA include: 
+A: Cuke is more focused on supporting applications with irregular computation and memory access patterns. Its main differences with TVM/XLA/TorchScript include: 
 1) It supports a more general syntax than basic tensor algebra and thus can express more general computations than neural networks. 
-2) It allows users to compose customized operators using the basic syntax, enabling more aggressive code optimization based on application-specific information. For example, our IPDPS'24 paper shows that cuke can perform aggressive loop fusions that TVM/XLA ignores. 
+2) It allows users to compose customized operators using the basic syntax, enabling more aggressive code optimization based on application-specific information. For example, our IPDPS'24 paper shows that cuke can perform aggressive loop fusions that TVM/XLA/TorchScript ignores. 
 3) It supports inspector-executor compilation for indirect tensor indexing to reduce memory access overhead. 
 
   
